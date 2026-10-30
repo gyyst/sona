@@ -3,7 +3,7 @@ name: Sona
 description: Client enhancement suite — champion select tools, OP.GG builds, match history and beautification.
 version: $package.version
 
-repo: https://github.com/WJZ-P/sona
+repo: https://github.com/gyyst/sona
 
 author:
   name: WJZ-P

@@ -27,9 +27,9 @@ export interface UpdateState {
   error: string
 }
 
-const RELEASE_PAGE_URL = 'https://com.hytale.net.cn/WJZ-P/sona/releases'
-const GITHUB_API_LATEST = 'https://api.github.com/repos/WJZ-P/sona/releases/latest'
-const GITHUB_API_RELEASES = 'https://api.github.com/repos/WJZ-P/sona/releases'
+const RELEASE_PAGE_URL = 'https://github.com/gyyst/sona/releases'
+const GITHUB_API_LATEST = 'https://api.github.com/repos/gyyst/sona/releases/latest'
+const GITHUB_API_RELEASES = 'https://api.github.com/repos/gyyst/sona/releases'
 
 function wrapCorsProxy(targetUrl: string): string {
   return `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
