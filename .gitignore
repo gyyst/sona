@@ -26,3 +26,9 @@ dist
 
 test/
 .cursor/
+
+.trellis
+.claude
+AGENTS.md
+CLAUDE.md
+.serena
