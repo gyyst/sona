@@ -1,0 +1,93 @@
+name: Sync Upstream
+
+# 定时将上游 WJZ-P/sona 的 main 合并到本仓库 main。
+# 注意：若上游修改了 .github/workflows/*，GITHUB_TOKEN 可能因缺少 workflow 权限而推送失败，
+#       此时需改用带 workflow 权限的 PAT 或手动同步。
+
+on:
+  schedule:
+    # 每天 UTC 18:17（北京时间次日 02:17），错开 GitHub 整点高峰
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/WJZ-P/sona.git
+  UPSTREAM_BRANCH: main
+  TARGET_BRANCH: main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream "$UPSTREAM_BRANCH"
+
+      - name: Merge upstream
+        id: merge
+        run: |
+          set -euo pipefail
+          BEFORE=$(git rev-parse HEAD)
+          if ! git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
+            git merge --abort || true
+            echo "::error::合并上游 $UPSTREAM_URL 冲突，已中止合并，未推送任何内容"
+            exit 1
+          fi
+          AFTER=$(git rev-parse HEAD)
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "上游没有新提交，跳过推送"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "上游有更新：$BEFORE -> $AFTER"
+          fi
+
+      - name: Push
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:$TARGET_BRANCH"
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="上游同步失败"
+          BODY=$(cat <<EOF
+          自动同步上游 ${UPSTREAM_URL} 失败，请手动处理。
+
+          - 工作流运行：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - 失败时间（UTC）：$(date -u +"%Y-%m-%d %H:%M:%S")
+          - 触发方式：${{ github.event_name }}
+          EOF
+          )
+          REPO="${{ github.repository }}"
+          EXISTING=$(gh issue list --repo "$REPO" --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY"
+          fi
