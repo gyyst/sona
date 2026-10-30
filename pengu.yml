@@ -6,8 +6,8 @@ version: $package.version
 repo: https://github.com/gyyst/sona
 
 author:
-  name: WJZ-P
-  github: WJZ-P
+  name: gyyst
+  github: gyyst
 
 tags: [utility, ui, champ-select]
 
