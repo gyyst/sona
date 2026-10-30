@@ -6,7 +6,7 @@ import { SonaSwitch } from '@/components/ui/SonaSwitch'
 import { SonaSelect } from '@/components/ui/SonaSelect'
 import { MatchHistoryModal } from '@/components/ui/MatchHistoryModal'
 import { searchChampions, getChampionById, getPlayableQueues, type ChampionInfo } from '@/lib/assets'
-import { lcu } from '@/lib/lcu'
+import { lcu, type ChatFriend } from '@/lib/lcu'
 import { logger } from '@/index'
 import { store } from '@/lib/store'
 import { useI18n } from '@/i18n'
@@ -173,6 +173,10 @@ export function ToolsPage() {
   const [enhancedFriendGameStatus, setEnhancedFriendGameStatus] = useState(store.get('enhancedFriendGameStatus'))
   const [lobbyEnhancement, setLobbyEnhancement] = useState(store.get('lobbyEnhancement'))
   const [lobbyEnhancementFetchCount, setLobbyEnhancementFetchCount] = useState(store.get('lobbyEnhancementFetchCount'))
+  const [autoTransferOwner, setAutoTransferOwner] = useState(store.get('autoTransferOwner'))
+  const [autoTransferOwnerTargetPuuid, setAutoTransferOwnerTargetPuuid] = useState(store.get('autoTransferOwnerTargetPuuid'))
+  const [autoTransferOwnerTargetRiotId, setAutoTransferOwnerTargetRiotId] = useState(store.get('autoTransferOwnerTargetRiotId'))
+  const [friendList, setFriendList] = useState<ChatFriend[]>([])
   const [customProfileBg, setCustomProfileBg] = useState(store.get('customProfileBg'))
   const [customBanner, setCustomBanner] = useState(store.get('customBanner'))
   const [isRemovingCrest, setIsRemovingCrest] = useState(false)
@@ -218,6 +222,59 @@ export function ToolsPage() {
     { value: 'mica', label: t('option.windowEffect.mica') },
     { value: 'transparent', label: t('option.windowEffect.transparent') },
   ]
+  const autoTransferOwnerTargetOptions = [
+    { value: 'auto', label: t('tools.autoTransferOwner.targetAuto') },
+    ...friendList.map((friend) => ({
+      value: friend.puuid,
+      label: friend.gameTag ? `${friend.gameName}#${friend.gameTag}` : friend.gameName,
+    })),
+  ]
+  // 好友列表未加载或加载失败时，仍展示已保存的目标
+  if (
+    autoTransferOwnerTargetPuuid
+    && !friendList.some((friend) => friend.puuid === autoTransferOwnerTargetPuuid)
+  ) {
+    autoTransferOwnerTargetOptions.push({
+      value: autoTransferOwnerTargetPuuid,
+      label: autoTransferOwnerTargetRiotId || autoTransferOwnerTargetPuuid,
+    })
+  }
+  if (autoTransferOwnerTargetRiotId && !autoTransferOwnerTargetPuuid) {
+    autoTransferOwnerTargetOptions.push({
+      value: 'manual',
+      label: t('tools.autoTransferOwner.manualOption', { name: autoTransferOwnerTargetRiotId }),
+    })
+  }
+  const autoTransferOwnerTargetValue = autoTransferOwnerTargetPuuid
+    || (autoTransferOwnerTargetRiotId ? 'manual' : 'auto')
+
+  const handleAutoTransferOwnerTargetChange = (value: string) => {
+    if (value === 'auto') {
+      setAutoTransferOwnerTargetPuuid('')
+      setAutoTransferOwnerTargetRiotId('')
+      store.set('autoTransferOwnerTargetPuuid', '')
+      store.set('autoTransferOwnerTargetRiotId', '')
+      return
+    }
+    if (value === 'manual') return
+
+    const friend = friendList.find((item) => item.puuid === value)
+    if (!friend) return
+    const riotId = friend.gameTag ? `${friend.gameName}#${friend.gameTag}` : friend.gameName
+    setAutoTransferOwnerTargetPuuid(friend.puuid)
+    setAutoTransferOwnerTargetRiotId(riotId)
+    store.set('autoTransferOwnerTargetPuuid', friend.puuid)
+    store.set('autoTransferOwnerTargetRiotId', riotId)
+  }
+
+  const handleAutoTransferOwnerRiotIdChange = (value: string) => {
+    setAutoTransferOwnerTargetRiotId(value)
+    store.set('autoTransferOwnerTargetRiotId', value)
+    if (autoTransferOwnerTargetPuuid) {
+      setAutoTransferOwnerTargetPuuid('')
+      store.set('autoTransferOwnerTargetPuuid', '')
+    }
+  }
 
   useEffect(() => {
     const unsubs = [
@@ -255,6 +312,9 @@ export function ToolsPage() {
       store.onChange('enhancedFriendGameStatus', setEnhancedFriendGameStatus),
       store.onChange('lobbyEnhancement', setLobbyEnhancement),
       store.onChange('lobbyEnhancementFetchCount', setLobbyEnhancementFetchCount),
+      store.onChange('autoTransferOwner', setAutoTransferOwner),
+      store.onChange('autoTransferOwnerTargetPuuid', setAutoTransferOwnerTargetPuuid),
+      store.onChange('autoTransferOwnerTargetRiotId', setAutoTransferOwnerTargetRiotId),
       store.onChange('customProfileBg', setCustomProfileBg),
       store.onChange('customBanner', setCustomBanner),
       store.onChange('autoHonor', setAutoHonor),
@@ -282,6 +342,26 @@ export function ToolsPage() {
       if (load()) window.clearInterval(timer)
     }, 1000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  // 加载好友列表供「自动转让房主」目标选择使用
+  useEffect(() => {
+    let cancelled = false
+    lcu.getFriends()
+      .then((list) => {
+        if (cancelled) return
+        const leagueFriends = list
+          .filter((friend) => friend.product === 'league_of_legends' && friend.gameName)
+          .sort((a, b) => {
+            const aOnline = a.availability === 'offline' ? 1 : 0
+            const bOnline = b.availability === 'offline' ? 1 : 0
+            if (aOnline !== bOnline) return aOnline - bOnline
+            return `${a.gameName}#${a.gameTag}`.localeCompare(`${b.gameName}#${b.gameTag}`)
+          })
+        setFriendList(leagueFriends)
+      })
+      .catch((error) => logger.warn('[AutoTransferOwner] 加载好友列表失败:', error))
+    return () => { cancelled = true }
   }, [])
 
   // 点击外部关闭英雄联想下拉
@@ -866,6 +946,28 @@ export function ToolsPage() {
             checked={lobbyEnhancement}
             onChange={(v) => { setLobbyEnhancement(v); store.set('lobbyEnhancement', v) }}
           />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.autoTransferOwner.title')}
+          description={t('tools.autoTransferOwner.description')}
+          layout="stacked"
+        >
+          <div className="sona-transfer-owner-controls">
+            <SonaSwitch
+              checked={autoTransferOwner}
+              onChange={(v) => { setAutoTransferOwner(v); store.set('autoTransferOwner', v) }}
+            />
+            <SonaSelect
+              value={autoTransferOwnerTargetValue}
+              onChange={handleAutoTransferOwnerTargetChange}
+              options={autoTransferOwnerTargetOptions}
+            />
+            <SonaInput
+              value={autoTransferOwnerTargetRiotId}
+              onChange={handleAutoTransferOwnerRiotIdChange}
+              placeholder={t('tools.autoTransferOwner.riotIdPlaceholder')}
+            />
+          </div>
         </SettingCard>
       </SettingGroup>
 

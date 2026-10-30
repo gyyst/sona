@@ -216,6 +216,12 @@ export interface SonaConfig {
   autoReturnToLobby: boolean
   /** 自动返回模式: queue=自动排队, lobby=仅返回房间 */
   autoReturnMode: string
+  /** 房间内自动转让房主 */
+  autoTransferOwner: boolean
+  /** 自动转让房主目标 PUUID（好友下拉选择，空则按规则回退） */
+  autoTransferOwnerTargetPuuid: string
+  /** 自动转让房主目标 Riot ID（手动输入，形如 GameName#TAG） */
+  autoTransferOwnerTargetRiotId: string
   /** 快速大厅模式：点击 Play 直接进入设置好的目标队列大厅 */
   quickLobbyMode: boolean
   /** 快速大厅模式的目标队列 ID */
@@ -311,6 +317,9 @@ const DEFAULT_CONFIG: SonaConfig = {
   gameAnalysisPopup: false,
   autoReturnToLobby: false,
   autoReturnMode: 'queue',
+  autoTransferOwner: false,
+  autoTransferOwnerTargetPuuid: '',
+  autoTransferOwnerTargetRiotId: '',
   quickLobbyMode: false,
   quickLobbyQueueId: 430,
 }

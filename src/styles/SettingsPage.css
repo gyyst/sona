@@ -921,3 +921,25 @@
   display: flex;
   gap: 6px;
 }
+
+.sona-transfer-owner-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.sona-transfer-owner-controls .sona-select {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.sona-transfer-owner-controls .sona-input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.sona-transfer-owner-controls .sona-switch {
+  flex-shrink: 0;
+}

@@ -668,6 +668,23 @@ class LCUManager {
   }
 
   /**
+   * 将指定成员提升为房主（转让房间所有权）
+   *
+   * 不同客户端版本的接口存在差异：优先使用 v2 + summonerId；
+   * 仅在 v2 返回 404（接口不存在/成员未命中）且提供 PUUID 时回退到 v3 + puuid，
+   * 避免对网络错误或权限错误重复发起请求。
+   */
+  async promoteLobbyMember(summonerId: number, puuid?: string): Promise<unknown> {
+    try {
+      return await post(`/lol-lobby/v2/lobby/members/${summonerId}/promote`)
+    } catch (error) {
+      const isNotFound = error instanceof Error && error.message.includes('→ 404')
+      if (!puuid || !isNotFound) throw error
+      return post(`/lol-lobby/v3/lobby/members/${encodeURIComponent(puuid)}/promote`)
+    }
+  }
+
+  /**
    * 秒退英雄选择阶段（dodge ChampSelect）
    *
    * 实现：直接 `DELETE /lol-lobby/v2/lobby` 解散/离开当前房间。离开房间会把玩家

@@ -31,6 +31,7 @@ import { updateCustomProfileBg } from '@/lib/features/profile-background'
 import { updateCustomBanner } from '@/lib/features/custom-banner'
 import { updateGameAnalysisPopup } from '@/lib/features/game-analysis-popup'
 import { updateAutoReturnToLobby } from '@/lib/features/auto-return-to-lobby'
+import { updateAutoTransferOwner, refreshAutoTransferOwner } from '@/lib/features/auto-transfer-party-owner'
 import { updateOpggBuildRecommendation } from '@/lib/features/opgg-build-recommendation'
 import { updateBeautifyCustomAvatar } from '@/lib/features/beautify-client/custom-avatar'
 import { initSocialSidebarGlass, updateSocialSidebarGlassConfig } from '@/lib/features/beautify-client/social-sidebar-glass'
@@ -1233,6 +1234,12 @@ export function initFeatures() {
       updateAutoReturnToLobby(true)
     }
   })
+
+  // 房间内自动转让房主
+  updateAutoTransferOwner(store.get('autoTransferOwner'))
+  store.onChange('autoTransferOwner', updateAutoTransferOwner)
+  store.onChange('autoTransferOwnerTargetPuuid', refreshAutoTransferOwner)
+  store.onChange('autoTransferOwnerTargetRiotId', refreshAutoTransferOwner)
 
   // 解锁在线状态切换（接管客户端按钮，弹自定义"隐身/手机在线"菜单）
   setAvailabilityHijackEnabled(store.get('unlockAvailability'))
