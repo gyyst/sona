@@ -29,7 +29,9 @@ import {
   type OpggRankedPosition,
   type OpggTier,
   type OpggItemBuild,
+  resolveOpggModeFromGameMode,
 } from '@/lib/opgg-api'
+import { mapAssignedPosition, mapOpggMatchups } from '@/lib/opgg-position'
 import type { GameflowPhase } from '@/types/lcu'
 import { translate } from '@/i18n'
 
@@ -168,27 +170,6 @@ function isLocalChampionLocked(session: ChampSelectSession): boolean {
   return localPickActions.some((action) => action.completed)
 }
 
-function mapAssignedPosition(position: string | undefined): OpggPosition {
-  switch (position?.trim().toLowerCase()) {
-    case 'top':
-      return 'top'
-    case 'jungle':
-      return 'jungle'
-    case 'middle':
-    case 'mid':
-      return 'mid'
-    case 'bottom':
-    case 'bot':
-    case 'adc':
-      return 'adc'
-    case 'utility':
-    case 'support':
-      return 'support'
-    default:
-      return 'none'
-  }
-}
-
 function isRankedQueue(queueId: number): boolean {
   const queue = getQueue(queueId)
   if (typeof queue?.isRanked === 'boolean') return queue.isRanked
@@ -297,12 +278,7 @@ async function resolveGameMode(queueId: number): Promise<string> {
 }
 
 function resolveOpggMode(context: RecommendationContext): OpggMode {
-  const mode = context.gameMode.toLowerCase()
-  if (mode === 'aram' || mode === 'kiwi') return 'aram'
-  if (mode === 'cherry' || mode === 'arena') return 'arena'
-  if (mode === 'nexusblitz' || mode === 'nexus_blitz') return 'nexus_blitz'
-  if (mode === 'urf' || mode === 'arurf') return 'urf'
-  return 'ranked'
+  return resolveOpggModeFromGameMode(context.gameMode)
 }
 
 function isKiwiMode(context: RecommendationContext): boolean {
@@ -1632,17 +1608,6 @@ function mapOpggAugments(augmentGroups: OpggAugmentGroup[]): BuildRecommendation
 function getAramggAugmentRarity(augmentId: number, mayhemAugments: AramggMayhemAugments): number | null {
   return normalizeAugmentRarity(getAugmentInfo(augmentId)?.rarity)
     ?? normalizeMayhemAugmentRarity(mayhemAugments[String(augmentId)]?.rarity, mayhemAugments)
-}
-
-function mapOpggMatchups(counters: NonNullable<OpggNormalModeChampion['data']['counters']>): BuildRecommendation['matchups'] {
-  return counters
-    .map((counter) => ({
-      championId: counter.champion_id,
-      play: counter.play,
-      win: counter.win,
-      winRate: counter.play > 0 ? counter.win / counter.play : 0,
-    }))
-    .filter((counter) => counter.championId > 0 && counter.play > 0)
 }
 
 function mapAramggAugments(augments: Record<string, AramggChampionStatEntry>, mayhemAugments: AramggMayhemAugments): BuildRecommendation['augments'] {

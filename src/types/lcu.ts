@@ -1058,6 +1058,40 @@ export interface ChampionSummaryData {
   squarePortraitPath: string
 }
 
+/**
+ * 英雄详情原始数据 — GET /lol-game-data/assets/v1/champions/{id}.json
+ *
+ * 该接口字段随客户端版本变化，可能整体缺失某个子对象，消费方必须按可选处理。
+ */
+export interface ChampionDetailData {
+  id?: number
+  name?: string
+  alias?: string
+  /** tank / fighter / mage / marksman / support / assassin */
+  roles?: string[]
+  tacticalInfo?: {
+    /** kPhysical / kMagic / kMixed */
+    damageType?: string
+    /** ranged / melee */
+    attackType?: string
+  }
+  playstyleInfo?: {
+    damage?: number
+    durability?: number
+    crowdControl?: number
+    mobility?: number
+    utility?: number
+  }
+  championTagInfo?: {
+    championTagPrimary?: string
+    championTagSecondary?: string
+  }
+  spells?: Array<{
+    spellKey?: string
+    abilityIconPath?: string
+  }>
+}
+
 // ==================== WebSocket 事件相关 ====================
 
 /** LCU WebSocket 事件消息 */

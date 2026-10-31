@@ -510,3 +510,233 @@
 .sga-kda-slash {
   color: #98abaf;
 }
+
+/* ---- 阵容结构 / 对位克制 / 参考胜率 ---- */
+
+.sga-insights {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid #3c2e16;
+  background: rgba(1, 10, 19, 0.45);
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.sga-insights::-webkit-scrollbar { width: 4px; }
+.sga-insights::-webkit-scrollbar-track { background: rgba(1, 10, 19, 0.8); }
+.sga-insights::-webkit-scrollbar-thumb { background: #3c2e16; border-radius: 2px; }
+
+.sga-insight {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 10px;
+  background: rgba(30, 35, 40, 0.55);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  border-radius: 2px;
+}
+
+.sga-insight.sga-bp {
+  flex-grow: 1.35;
+}
+
+.sga-insight-title {
+  color: #c8aa6e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+}
+
+/* ---- 阵容结构 ---- */
+
+.sga-comp-team {
+  margin-bottom: 6px;
+}
+
+.sga-comp-team:last-child {
+  margin-bottom: 0;
+}
+
+.sga-comp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.sga-comp-team-name {
+  font-weight: 700;
+}
+
+.sga-comp-team--blue .sga-comp-team-name {
+  color: #00a1e6;
+}
+
+.sga-comp-team--red .sga-comp-team-name {
+  color: #e84057;
+}
+
+.sga-comp-damage-counts {
+  display: flex;
+  gap: 6px;
+  color: #a09b8c;
+  font-size: 10px;
+}
+
+.sga-comp-ad { color: #e0c27a; }
+.sga-comp-ap { color: #6aa9ff; }
+.sga-comp-mixed { color: #c084fc; }
+
+.sga-comp-bar {
+  display: flex;
+  height: 5px;
+  margin: 3px 0 4px;
+  background: #111;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sga-comp-bar-ad {
+  height: 100%;
+  background: #c8aa6e;
+}
+
+.sga-comp-bar-ap {
+  height: 100%;
+  background: #4a9eff;
+}
+
+.sga-comp-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 10px;
+  color: #a09b8c;
+}
+
+.sga-comp-stats strong {
+  color: #f0e6d2;
+}
+
+.sga-comp-warning {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #7e7e7e;
+}
+
+/* ---- 对位克制 ---- */
+
+.sga-bp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sga-bp-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 10px;
+}
+
+.sga-bp-pos {
+  width: 26px;
+  flex-shrink: 0;
+  color: #a09b8c;
+}
+
+.sga-bp-champ {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.sga-bp-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sga-bp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d5d0c3;
+}
+
+.sga-bp-vs {
+  flex-shrink: 0;
+  color: #5c5b57;
+}
+
+.sga-bp-rate {
+  flex-shrink: 0;
+  width: 34px;
+  text-align: right;
+  font-weight: 700;
+}
+
+.sga-bp-status {
+  flex-shrink: 0;
+  padding: 0 3px;
+  font-size: 9px;
+  border-radius: 2px;
+}
+
+.sga-bp-status--advantage { color: #5bbd72; }
+.sga-bp-status--disadvantage { color: #e84057; }
+.sga-bp-status--neutral { color: #a09b8c; }
+
+.sga-bp-status.sga-bp-status--advantage { background: rgba(91, 189, 114, 0.15); }
+.sga-bp-status.sga-bp-status--disadvantage { background: rgba(232, 64, 87, 0.15); }
+.sga-bp-status.sga-bp-status--neutral { background: rgba(160, 155, 140, 0.12); }
+
+/* ---- 参考胜率 ---- */
+
+.sga-pred-rates {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sga-pred-blue { color: #00a1e6; }
+.sga-pred-red { color: #e84057; }
+
+.sga-pred-bar {
+  display: flex;
+  height: 7px;
+  margin: 5px 0;
+  background: #111;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sga-pred-bar-blue {
+  height: 100%;
+  background: #00a1e6;
+}
+
+.sga-pred-bar-red {
+  height: 100%;
+  background: #e84057;
+}
+
+.sga-pred-basis {
+  font-size: 10px;
+  color: #a09b8c;
+}
+
+.sga-pred-disclaimer {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #5c5b57;
+}

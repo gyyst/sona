@@ -37,6 +37,7 @@ import type {
   SpectatorLaunchPayload,
   SummonerSpellData,
   ChampionSummaryData,
+  ChampionDetailData,
   GameQueue,
   ChampSelectSummoner,
   RewardsGrant,
@@ -1667,6 +1668,11 @@ class LCUManager {
   /** 获取所有英雄摘要数据（含 squarePortraitPath） */
   getChampionSummary(): Promise<ChampionSummaryData[]> {
     return get('/lol-game-data/assets/v1/champion-summary.json')
+  }
+
+  /** 获取单个英雄详情（roles / tacticalInfo / playstyleInfo / championTagInfo） */
+  getChampionDetail(championId: number): Promise<ChampionDetailData> {
+    return get(`/lol-game-data/assets/v1/champions/${championId}.json`)
   }
 
   /** 获取所有符文数据（含 iconPath / description，对应单个符文 ID） */

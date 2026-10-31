@@ -2,12 +2,19 @@ import { useState, useEffect, useCallback, useRef, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Modal } from '@/components/ui/Modal'
 import { MatchHistoryModal } from '@/components/ui/MatchHistoryModal'
+import { CompositionSection } from '@/components/ui/game-analysis/CompositionSection'
+import { BpSection } from '@/components/ui/game-analysis/BpSection'
+import { PredictionSection } from '@/components/ui/game-analysis/PredictionSection'
 import { PlayerNoteBadge, PlayerNoteEditButton } from '@/components/ui/PlayerNoteBadge'
 import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
 import { lcu, queueIdToTag } from '@/lib/lcu'
 import { store } from '@/lib/store'
-import { getChampIcon } from '@/lib/assets'
+import { getChampIcon, getChampionDetail } from '@/lib/assets'
 import { getRating } from '@/lib/features'
+import { mapAssignedPosition } from '@/lib/opgg-position'
+import { resolveOpggModeFromGameMode, type OpggTier } from '@/lib/opgg-api'
+import { analyzeTeamComposition, predictWinRate, type TeamComposition, type WinRatePrediction } from '@/lib/team-composition'
+import { loadTeamMatchups, type MatchupEntry } from '@/lib/team-matchups'
 import { filterSonaStrengthGamesByQueue, shouldSkipSonaStrengthGame } from '@/lib/player-strength-score'
 import { computePlayerTags, formatPlayerTag, type PlayerTag } from '@/lib/player-tags'
 import type { PlayerNote } from '@/lib/player-notes'
@@ -76,6 +83,20 @@ interface GameInfo {
   queueId: number
 }
 
+/** 阵容结构 / 对位 / 参考胜率等补充数据；加载失败时保持 null 并隐藏对应区块 */
+interface GameInsights {
+  blueComposition: TeamComposition
+  redComposition: TeamComposition
+  matchups: MatchupEntry[]
+  prediction: WinRatePrediction | null
+}
+
+function getTeamAverageWinRate(team: PlayerAnalysis[]): number | null {
+  const valid = team.filter((player) => player.winRate != null)
+  if (valid.length === 0) return null
+  return valid.reduce((sum, player) => sum + player.winRate!, 0) / valid.length
+}
+
 // ==================== 段位颜色映射 ====================
 
 const RANK_COLORS: Record<string, string> = {
@@ -130,6 +151,8 @@ const LCU_TIMEOUT_MS = 10_000
 const PLAYER_TIMEOUT_MS = 15_000
 /** 整轮十人分析的总兜底超时 */
 const ANALYSIS_TIMEOUT_MS = 45_000
+/** 单个英雄详情 / OP.GG 对位请求的独立超时，失败只隐藏对应区块 */
+const INSIGHTS_TIMEOUT_MS = 8_000
 
 // ==================== 组件 ====================
 
@@ -156,6 +179,7 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
   const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
   const [playerTaggingEnabled, setPlayerTaggingEnabled] = useState(store.get('playerTaggingEnabled'))
   const [editingNotePlayer, setEditingNotePlayer] = useState<{ puuid: string; displayName: string } | null>(null)
+  const [insights, setInsights] = useState<GameInsights | null>(null)
   const loadTokenRef = useRef(0)
 
   // 备注 / 黑名单变化时同步徽标；总开关关闭时不显示任何提示
@@ -187,6 +211,7 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
     setRedTeam([])
     setGameInfo(null)
     setPremadeGroups(new Map())
+    setInsights(null)
 
     // Mock 模式：直接使用传入的 mock 数据
     if (mockData) {
@@ -265,16 +290,21 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
         championId: number
         teamParticipantId: number
         isBroadcaster: boolean
+        selectedPosition: string
       }
 
       // 从 selections 构建 ResolvedPlayer，通过 puuid 是否在 team 中判断主播模式
       const resolveSelections = (sels: PlayerChampionSelection[]): ResolvedPlayer[] =>
-        sels.map(s => ({
-          puuid: s.puuid,
-          championId: s.championId,
-          teamParticipantId: puuidToTeamPlayer.get(s.puuid)?.teamParticipantId ?? 0,
-          isBroadcaster: !puuidToTeamPlayer.has(s.puuid),
-        }))
+        sels.map(s => {
+          const teamPlayer = puuidToTeamPlayer.get(s.puuid)
+          return {
+            puuid: s.puuid,
+            championId: s.championId,
+            teamParticipantId: teamPlayer?.teamParticipantId ?? 0,
+            isBroadcaster: !teamPlayer,
+            selectedPosition: teamPlayer?.selectedPosition || teamPlayer?.selectedRole || '',
+          }
+        })
 
       const resolvedTeamOne = resolveSelections(selTeamOne)
       const resolvedTeamTwo = resolveSelections(selTeamTwo)
@@ -428,8 +458,81 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
       )
       if (loadToken !== loadTokenRef.current) return
 
-      setBlueTeam(sortTeamByPosition(isInTeamOne ? one : two))
-      setRedTeam(sortTeamByPosition(isInTeamOne ? two : one))
+      const bluePlayers = isInTeamOne ? resolvedTeamOne : resolvedTeamTwo
+      const redPlayers = isInTeamOne ? resolvedTeamTwo : resolvedTeamOne
+      const blueAnalysis = isInTeamOne ? one : two
+      const redAnalysis = isInTeamOne ? two : one
+
+      setBlueTeam(sortTeamByPosition(blueAnalysis))
+      setRedTeam(sortTeamByPosition(redAnalysis))
+
+      // 阵容结构 / 对位 / 参考胜率在十人分析完成后异步加载，不阻塞现有弹窗
+      void (async () => {
+        try {
+          const loadDetails = (players: ResolvedPlayer[]) => Promise.all(players.map((player) => {
+            if (player.championId <= 0) return Promise.resolve(null)
+            return withTimeout(
+              getChampionDetail(player.championId),
+              INSIGHTS_TIMEOUT_MS,
+              `getChampionDetail(${player.championId})`,
+            ).catch(() => null)
+          }))
+
+          const [blueDetails, redDetails] = await Promise.all([loadDetails(bluePlayers), loadDetails(redPlayers)])
+          if (loadToken !== loadTokenRef.current) return
+
+          const blueComposition = analyzeTeamComposition(blueDetails)
+          const redComposition = analyzeTeamComposition(redDetails)
+          const mode = resolveOpggModeFromGameMode(session.gameData.queue.gameMode)
+          const tier = (store.get('opggBuildRecommendationTier') || 'emerald_plus') as OpggTier
+
+          const matchupsResult = await loadTeamMatchups({
+            allies: bluePlayers.map((player) => ({
+              championId: player.championId,
+              position: mapAssignedPosition(player.selectedPosition),
+            })),
+            enemies: redPlayers.map((player) => ({
+              championId: player.championId,
+              position: mapAssignedPosition(player.selectedPosition),
+            })),
+            mode,
+            tier,
+          })
+          if (loadToken !== loadTokenRef.current) return
+
+          const allyMatchupWinRate = matchupsResult.allyAverageWinRate != null
+            ? matchupsResult.allyAverageWinRate * 100
+            : null
+          const prediction = predictWinRate(
+            {
+              averageWinRate: getTeamAverageWinRate(blueAnalysis),
+              compositionScore: blueComposition.complete ? blueComposition.overallScore : null,
+              matchupWinRate: allyMatchupWinRate,
+            },
+            {
+              averageWinRate: getTeamAverageWinRate(redAnalysis),
+              compositionScore: redComposition.complete ? redComposition.overallScore : null,
+              matchupWinRate: allyMatchupWinRate != null ? 100 - allyMatchupWinRate : null,
+            },
+          )
+
+          const hasInsights = blueComposition.resolved > 0
+            || redComposition.resolved > 0
+            || matchupsResult.entries.length > 0
+            || prediction != null
+          if (hasInsights) {
+            setInsights({
+              blueComposition,
+              redComposition,
+              matchups: matchupsResult.entries,
+              prediction,
+            })
+          }
+        } catch (err) {
+          // 新增加载失败只隐藏对应区块，不影响现有十人分析
+          console.warn('[GameAnalysis] 阵容/对位数据加载失败:', err)
+        }
+      })()
     } catch (err) {
       if (loadToken !== loadTokenRef.current) return
       const isTimeout = err instanceof Error && err.message.startsWith('[Timeout]')
@@ -449,14 +552,10 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
   }, [open, loadAnalysis])
 
   // 计算队伍平均胜率
-  const avgWinRate = (team: PlayerAnalysis[]) => {
-    const valid = team.filter(p => p.winRate != null)
-    if (valid.length === 0) return null
-    return Math.round(valid.reduce((sum, p) => sum + p.winRate!, 0) / valid.length)
-  }
-
-  const blueAvg = avgWinRate(blueTeam)
-  const redAvg = avgWinRate(redTeam)
+  const blueAvgRaw = getTeamAverageWinRate(blueTeam)
+  const redAvgRaw = getTeamAverageWinRate(redTeam)
+  const blueAvg = blueAvgRaw != null ? Math.round(blueAvgRaw) : null
+  const redAvg = redAvgRaw != null ? Math.round(redAvgRaw) : null
 
   return (
     <>
@@ -492,57 +591,72 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
             </div>
           )}
           {!loading && !error && (blueTeam.length > 0 || redTeam.length > 0) && (
-            <div className="sga-teams">
-              {/* 蓝色方 */}
-              <div className="sga-team">
-                <div className="sga-team-header sga-team-header--blue">
-                  <span className="sga-team-name">{t('gameAnalysis.blueTeam')}</span>
-                  {blueAvg != null && (
-                    <span className="sga-team-avg">
-                      {t('gameAnalysis.avgWinRate')} <span className={`sga-team-avg-num ${blueAvg > 50 ? 'sga-avg-green' : 'sga-avg-red'}`}>{blueAvg}%</span>
-                    </span>
-                  )}
+            <>
+              <div className="sga-teams">
+                {/* 蓝色方 */}
+                <div className="sga-team">
+                  <div className="sga-team-header sga-team-header--blue">
+                    <span className="sga-team-name">{t('gameAnalysis.blueTeam')}</span>
+                    {blueAvg != null && (
+                      <span className="sga-team-avg">
+                        {t('gameAnalysis.avgWinRate')} <span className={`sga-team-avg-num ${blueAvg > 50 ? 'sga-avg-green' : 'sga-avg-red'}`}>{blueAvg}%</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="sga-team-players">
+                    {blueTeam.map((p, i) => (
+                      <PlayerRow
+                        key={p.puuid || i}
+                        player={p}
+                        isRed={false}
+                        queueId={gameInfo?.queueId}
+                        note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
+                        onEditNote={playerNotesEnabled ? handleEditNote : undefined}
+                        showTags={playerTaggingEnabled}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className="sga-team-players">
-                  {blueTeam.map((p, i) => (
-                    <PlayerRow
-                      key={p.puuid || i}
-                      player={p}
-                      isRed={false}
-                      queueId={gameInfo?.queueId}
-                      note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
-                      onEditNote={playerNotesEnabled ? handleEditNote : undefined}
-                      showTags={playerTaggingEnabled}
-                    />
-                  ))}
+
+                {/* 红色方 */}
+                <div className="sga-team">
+                  <div className="sga-team-header sga-team-header--red">
+                    <span className="sga-team-name">{t('gameAnalysis.redTeam')}</span>
+                    {redAvg != null && (
+                      <span className="sga-team-avg">
+                        {t('gameAnalysis.avgWinRate')} <span className={`sga-team-avg-num ${redAvg > 50 ? 'sga-avg-green' : 'sga-avg-red'}`}>{redAvg}%</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="sga-team-players">
+                    {redTeam.map((p, i) => (
+                      <PlayerRow
+                        key={p.puuid || i}
+                        player={p}
+                        isRed
+                        queueId={gameInfo?.queueId}
+                        note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
+                        onEditNote={playerNotesEnabled ? handleEditNote : undefined}
+                        showTags={playerTaggingEnabled}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* 红色方 */}
-              <div className="sga-team">
-                <div className="sga-team-header sga-team-header--red">
-                  <span className="sga-team-name">{t('gameAnalysis.redTeam')}</span>
-                  {redAvg != null && (
-                    <span className="sga-team-avg">
-                      {t('gameAnalysis.avgWinRate')} <span className={`sga-team-avg-num ${redAvg > 50 ? 'sga-avg-green' : 'sga-avg-red'}`}>{redAvg}%</span>
-                    </span>
+              {insights && (
+                <div className="sga-insights">
+                  <CompositionSection
+                    blue={insights.blueComposition}
+                    red={insights.redComposition}
+                  />
+                  <BpSection entries={insights.matchups} />
+                  {insights.prediction && (
+                    <PredictionSection prediction={insights.prediction} />
                   )}
                 </div>
-                <div className="sga-team-players">
-                  {redTeam.map((p, i) => (
-                    <PlayerRow
-                      key={p.puuid || i}
-                      player={p}
-                      isRed
-                      queueId={gameInfo?.queueId}
-                      note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
-                      onEditNote={playerNotesEnabled ? handleEditNote : undefined}
-                      showTags={playerTaggingEnabled}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
+              )}
+            </>
           )}
           {!loading && !error && blueTeam.length === 0 && redTeam.length === 0 && (
             <div className="sga-empty">{t('gameAnalysis.empty')}</div>

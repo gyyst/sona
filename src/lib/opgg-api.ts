@@ -437,4 +437,14 @@ export function normalizeOpggVersion(gameVersion: string): string | undefined {
   return match?.[1]
 }
 
+/** 把客户端 gameMode 归一化为 OP.GG 模式 */
+export function resolveOpggModeFromGameMode(gameMode: string): OpggMode {
+  const mode = gameMode.toLowerCase()
+  if (mode === 'aram' || mode === 'kiwi') return 'aram'
+  if (mode === 'cherry' || mode === 'arena') return 'arena'
+  if (mode === 'nexusblitz' || mode === 'nexus_blitz') return 'nexus_blitz'
+  if (mode === 'urf' || mode === 'arurf') return 'urf'
+  return 'ranked'
+}
+
 export const opggApi = new OpggDataApi()

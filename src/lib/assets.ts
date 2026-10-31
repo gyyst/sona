@@ -11,7 +11,8 @@
 
 import { lcu } from '@/lib/lcu'
 import { logger } from '@/index'
-import type { GameQueue } from '@/types/lcu'
+import { withTimeout } from '@/lib/utils'
+import type { ChampionDetailData, GameQueue } from '@/types/lcu'
 import balanceData from '@/data/champion-balance.json'
 
 /** 路径小写化，LCU 资源路径不区分大小写但统一小写更安全 */
@@ -75,6 +76,35 @@ export interface ChampionInfo {
   alias: string
 }
 const championMap = new Map<number, ChampionInfo>()
+
+/** 归一化后的英雄详情；原始 JSON 字段可能随版本缺失，这里统一补默认值 */
+export interface ChampionDetail {
+  id: number
+  name: string
+  /** tank / fighter / mage / marksman / support / assassin */
+  roles: string[]
+  tacticalInfo: {
+    damageType: 'kPhysical' | 'kMagic' | 'kMixed' | 'unknown'
+    attackType: 'ranged' | 'melee' | 'unknown'
+  }
+  playstyleInfo: {
+    damage: number
+    durability: number
+    crowdControl: number
+    mobility: number
+    utility: number
+  }
+  championTagInfo: {
+    championTagPrimary: string
+    championTagSecondary: string
+  }
+  spells: Array<{ spellKey: string; abilityIconPath: string }>
+}
+
+/** championId → 详情请求（进行中 Promise 也缓存，避免重复请求） */
+const championDetailCache = new Map<number, Promise<ChampionDetail | null>>()
+/** 英雄详情请求超时；超时后从缓存移除，避免悬挂的 Promise 永久占据缓存 */
+const CHAMPION_DETAIL_TIMEOUT_MS = 10_000
 
 /**
  * 英雄在特殊模式下的平衡数值
@@ -432,6 +462,79 @@ export function getAllChampions(): ChampionInfo[] {
 /** 通过 ID 获取英雄信息 */
 export function getChampionById(id: number): ChampionInfo | undefined {
   return championMap.get(id)
+}
+
+function normalizePlaystyleValue(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.min(3, Math.max(0, numeric))
+}
+
+function normalizeChampionDetail(championId: number, raw: ChampionDetailData | null | undefined): ChampionDetail | null {
+  if (!raw || typeof raw !== 'object') return null
+
+  const damageType = raw.tacticalInfo?.damageType
+  const attackType = raw.tacticalInfo?.attackType
+
+  return {
+    id: typeof raw.id === 'number' && raw.id > 0 ? raw.id : championId,
+    name: typeof raw.name === 'string' ? raw.name : '',
+    roles: Array.isArray(raw.roles) ? raw.roles.filter((role): role is string => typeof role === 'string') : [],
+    tacticalInfo: {
+      damageType: damageType === 'kPhysical' || damageType === 'kMagic' || damageType === 'kMixed'
+        ? damageType
+        : 'unknown',
+      attackType: attackType === 'ranged' || attackType === 'melee' ? attackType : 'unknown',
+    },
+    playstyleInfo: {
+      damage: normalizePlaystyleValue(raw.playstyleInfo?.damage),
+      durability: normalizePlaystyleValue(raw.playstyleInfo?.durability),
+      crowdControl: normalizePlaystyleValue(raw.playstyleInfo?.crowdControl),
+      mobility: normalizePlaystyleValue(raw.playstyleInfo?.mobility),
+      utility: normalizePlaystyleValue(raw.playstyleInfo?.utility),
+    },
+    championTagInfo: {
+      championTagPrimary: typeof raw.championTagInfo?.championTagPrimary === 'string' ? raw.championTagInfo.championTagPrimary : '',
+      championTagSecondary: typeof raw.championTagInfo?.championTagSecondary === 'string' ? raw.championTagInfo.championTagSecondary : '',
+    },
+    spells: Array.isArray(raw.spells)
+      ? raw.spells.map((spell) => ({
+        spellKey: typeof spell?.spellKey === 'string' ? spell.spellKey : '',
+        abilityIconPath: typeof spell?.abilityIconPath === 'string' ? normalizePath(spell.abilityIconPath) : '',
+      }))
+      : [],
+  }
+}
+
+/**
+ * 获取英雄详情（带内存缓存）
+ *
+ * 请求失败返回 null 且不缓存失败，后续调用可以重试。
+ */
+export function getChampionDetail(championId: number): Promise<ChampionDetail | null> {
+  if (!(championId > 0)) return Promise.resolve(null)
+
+  const cached = championDetailCache.get(championId)
+  if (cached) return cached
+
+  const promise = withTimeout(
+    lcu.getChampionDetail(championId),
+    CHAMPION_DETAIL_TIMEOUT_MS,
+    `getChampionDetail(${championId})`,
+  )
+    .then((raw) => {
+      const detail = normalizeChampionDetail(championId, raw)
+      if (!detail) championDetailCache.delete(championId)
+      return detail
+    })
+    .catch((err) => {
+      championDetailCache.delete(championId)
+      logger.warn('[Assets] 获取英雄详情失败: championId=%d', championId, err)
+      return null
+    })
+
+  championDetailCache.set(championId, promise)
+  return promise
 }
 
 /**
