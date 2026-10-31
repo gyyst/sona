@@ -97,6 +97,8 @@ export interface SonaConfig {
   analyzeTeamPowerMsgType: string
   /** 战绩查询局数（20/50/100），默认50 */
   analyzeTeamPowerFetchCount: number
+  /** 牛马检测器聊天输出模式: simple=一行一人, detailed=追加强项/短板与样本 */
+  analyzeTeamPowerDetail: 'simple' | 'detailed'
   /** 英雄选择增强查询局数（20/50/100），默认50 */
   champSelectAssistFetchCount: number
   /** 全局战力分析查询局数（20/50/100），默认50 */
@@ -269,6 +271,7 @@ const DEFAULT_CONFIG: SonaConfig = {
   analyzeTeamPower: false,
   analyzeTeamPowerMsgType: 'celebration',
   analyzeTeamPowerFetchCount: 50,
+  analyzeTeamPowerDetail: 'simple',
   champSelectAssistFetchCount: 50,
   gameAnalysisFetchCount: 50,
   dashboardQueueId: 0,

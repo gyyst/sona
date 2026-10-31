@@ -171,6 +171,7 @@ export function ToolsPage() {
   const [analyzeTeamPower, setAnalyzeTeamPower] = useState(store.get('analyzeTeamPower'))
   const [analyzeTeamPowerMsgType, setAnalyzeTeamPowerMsgType] = useState(store.get('analyzeTeamPowerMsgType'))
   const [analyzeTeamPowerFetchCount, setAnalyzeTeamPowerFetchCount] = useState(store.get('analyzeTeamPowerFetchCount'))
+  const [analyzeTeamPowerDetail, setAnalyzeTeamPowerDetail] = useState(store.get('analyzeTeamPowerDetail'))
   const [champSelectAssistFetchCount, setChampSelectAssistFetchCount] = useState(store.get('champSelectAssistFetchCount'))
   const [gameAnalysisFetchCount, setGameAnalysisFetchCount] = useState(store.get('gameAnalysisFetchCount'))
   const [sideIndicator, setSideIndicator] = useState(store.get('sideIndicator'))
@@ -219,6 +220,10 @@ export function ToolsPage() {
   const visibilityOptions = [
     { value: 'celebration', label: t('option.visibility.self') },
     { value: 'chat', label: t('option.visibility.team') },
+  ]
+  const teamPowerDetailOptions = [
+    { value: 'simple', label: t('tools.analyzeTeamPowerDetail.simple') },
+    { value: 'detailed', label: t('tools.analyzeTeamPowerDetail.detailed') },
   ]
   const effectOptions = [
     { value: 'none', label: t('option.windowEffect.none') },
@@ -331,6 +336,7 @@ export function ToolsPage() {
       store.onChange('autoReturnMode', setAutoReturnMode),
       store.onChange('analyzeTeamPower', setAnalyzeTeamPower),
       store.onChange('analyzeTeamPowerFetchCount', setAnalyzeTeamPowerFetchCount),
+      store.onChange('analyzeTeamPowerDetail', setAnalyzeTeamPowerDetail),
       store.onChange('champSelectAssistFetchCount', setChampSelectAssistFetchCount),
       store.onChange('gameAnalysisFetchCount', setGameAnalysisFetchCount),
       store.onChange('sideIndicator', setSideIndicator),
@@ -629,6 +635,15 @@ export function ToolsPage() {
             value={String(analyzeTeamPowerFetchCount)}
             onChange={(v) => { setAnalyzeTeamPowerFetchCount(Number(v)); store.set('analyzeTeamPowerFetchCount', Number(v)) }}
             options={recentOptions}
+          />
+          <SonaSelect
+            value={analyzeTeamPowerDetail}
+            onChange={(v) => {
+              const detail = v === 'detailed' ? 'detailed' : 'simple'
+              setAnalyzeTeamPowerDetail(detail)
+              store.set('analyzeTeamPowerDetail', detail)
+            }}
+            options={teamPowerDetailOptions}
           />
           <SonaSelect
             value={analyzeTeamPowerMsgType}

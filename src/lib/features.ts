@@ -50,6 +50,8 @@ import { setAvailabilityHijackEnabled, setHideTFTEnabled, setHideClassicModeEnab
 import {
   calculateSonaPlayerStrengthScore,
   filterSonaStrengthGamesByQueue,
+  getSonaStrengthDimensionLabel,
+  getTeamPowerTitleKey,
   shouldSkipSonaStrengthGame,
   type SonaPlayerStrengthScore,
 } from '@/lib/player-strength-score'
@@ -68,7 +70,8 @@ interface TeammateStats {
   obfuscatedPuuid: string
   gameName: string
   tagLine: string
-  winRate: number | null  // null = 查询失败或无战绩
+  /** 简单胜率，0-100 百分比；与 strengthScore.winRate（0-1 加权）口径不同。null = 查询失败或无战绩 */
+  winRate: number | null
   wins: number
   total: number
   avgK: number
@@ -894,25 +897,43 @@ export function getRating(winRate: number, kda: number): string {
   return translate('champSelect.rating.actor')
 }
 
-const TEAM_POWER_TITLE_KEYS = [
-  'strength.teamTier.ace',
-  'strength.teamTier.high',
-  'strength.teamTier.mid',
-  'strength.teamTier.low',
-  'strength.teamTier.burden',
-] as const
+/** 客户端聊天消息的保守长度上限；详细模式超出时退回简洁输出。 */
+const CHAMP_SELECT_CHAT_MAX_LENGTH = 512
 
+/**
+ * 称号按绝对分数档位分配，不再按队内排名强制分档。
+ * 样本不足/置信度低时由 getTeamPowerTitleKey 返回「数据不足」。
+ */
 function assignTeamPowerTitles(stats: TeammateStats[]): Map<string, string> {
-  const ranked = [...stats]
-    .filter((stat): stat is TeammateStats & { strengthScore: SonaPlayerStrengthScore } => Boolean(stat.strengthScore))
-    .sort((a, b) => b.strengthScore.score - a.strengthScore.score)
-
   const titles = new Map<string, string>()
-  ranked.forEach((stat, index) => {
-    titles.set(getTeammateStatsKey(stat), translate(TEAM_POWER_TITLE_KEYS[Math.min(index, TEAM_POWER_TITLE_KEYS.length - 1)]))
-  })
+
+  for (const stat of stats) {
+    const score = stat.strengthScore
+    if (!score) continue
+    const titleKey = score.titleKey ?? getTeamPowerTitleKey(score.score, score.confidence, score.validGames)
+    titles.set(getTeammateStatsKey(stat), translate(titleKey))
+  }
 
   return titles
+}
+
+function formatTeamPowerDetail(score: SonaPlayerStrengthScore): string {
+  const sample = score.sampleLabel ?? translate('strength.sample', {
+    games: score.validGames,
+    confidence: Math.round(score.confidence * 100),
+  })
+  const strengths = (score.strengths ?? []).map(getSonaStrengthDimensionLabel).join('/')
+
+  if (score.titleKey === 'strength.teamTier.insufficient' || !strengths) {
+    return translate('champSelect.teamAnalysis.detailSample', { sample })
+  }
+
+  const weaknesses = (score.weaknesses ?? []).map(getSonaStrengthDimensionLabel).join('/')
+  if (!weaknesses) {
+    return translate('champSelect.teamAnalysis.detailBalanced', { sample })
+  }
+
+  return translate('champSelect.teamAnalysis.detail', { sample, strengths, weaknesses })
 }
 
 async function analyzeTeammates() {
@@ -921,14 +942,19 @@ async function analyzeTeammates() {
 
     logger.info('┌─── 队友战绩分析 ───')
 
-    const chatLines: string[] = [translate('champSelect.teamAnalysis.header', { count: fetchCount })]
+    const headerLine = translate('champSelect.teamAnalysis.header', { count: fetchCount })
+    const simpleLines: string[] = [headerLine]
+    const detailedLines: string[] = [headerLine]
+    const detailMode = store.get('analyzeTeamPowerDetail') === 'detailed'
     const teamPowerTitles = assignTeamPowerTitles(stats)
 
     for (const s of stats) {
       const floor = translate('champSelect.teamAnalysis.floor', { floor: s.floor })
       if (s.winRate == null) {
         logger.info('│ %s — %s#%s — 无近期战绩或查询失败', floor, s.gameName, s.tagLine)
-        chatLines.push(translate('champSelect.teamAnalysis.emptyLine', { floor }))
+        const emptyLine = translate('champSelect.teamAnalysis.emptyLine', { floor })
+        simpleLines.push(emptyLine)
+        detailedLines.push(emptyLine)
         continue
       }
 
@@ -944,13 +970,22 @@ async function analyzeTeammates() {
         kdaStr, s.avgK, s.avgD, s.avgA, scoreText, title,
       )
 
-      chatLines.push(translate('champSelect.teamAnalysis.line', { floor, title, winRate, kda: kdaStr, score: scoreText }))
+      const simpleLine = translate('champSelect.teamAnalysis.line', { floor, title, winRate, kda: kdaStr, score: scoreText })
+      simpleLines.push(simpleLine)
+      detailedLines.push(
+        detailMode && s.strengthScore
+          ? `${simpleLine}${formatTeamPowerDetail(s.strengthScore)}`
+          : simpleLine,
+      )
     }
 
     logger.info('└────────────────────')
 
-    // 等待聊天室就绪后发送
-    const msg = chatLines.join('\n')
+    const detailedMessage = detailedLines.join('\n')
+    // 聊天长度有限；详细模式超限时自动退回简洁输出，避免整条消息发送失败。
+    const msg = detailedMessage.length <= CHAMP_SELECT_CHAT_MAX_LENGTH
+      ? detailedMessage
+      : simpleLines.join('\n')
     const msgType = store.get('analyzeTeamPowerMsgType') || 'celebration'
     for (let attempt = 0; attempt < 10; attempt++) {
       try {

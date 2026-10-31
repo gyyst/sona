@@ -1,5 +1,5 @@
 import type { SgpGameSummaryLol, SgpParticipantLol } from '@/types/sgp'
-import { translate } from '@/i18n'
+import { translate, type TranslationKey } from '@/i18n'
 
 export type SonaStrengthRole =
   | 'TOP'
@@ -21,6 +21,19 @@ export type SonaStrengthGrade =
   | 'risky'
   | 'critical'
 
+export type BreakdownKey =
+  | 'combat'
+  | 'win'
+  | 'damage'
+  | 'economy'
+  | 'objectives'
+  | 'vision'
+  | 'durability'
+  | 'farming'
+  | 'lanePressure'
+  | 'clutch'
+  | 'teamUtility'
+
 export interface SonaScoreBreakdown {
   combat: number
   win: number
@@ -30,7 +43,22 @@ export interface SonaScoreBreakdown {
   vision: number
   durability: number
   farming: number
+  /** 对位压制；无对线模式或找不到同位置对手时缺省 */
+  lanePressure?: number
+  /** 关键击杀/终结能力；字段缺失时缺省 */
+  clutch?: number
+  /** 团队功能：控制、治疗、护盾；字段缺失时缺省 */
+  teamUtility?: number
 }
+
+/** 牛马称号的绝对档位 i18n key。 */
+export type SonaTeamPowerTitleKey =
+  | 'strength.teamTier.ace'
+  | 'strength.teamTier.high'
+  | 'strength.teamTier.mid'
+  | 'strength.teamTier.low'
+  | 'strength.teamTier.burden'
+  | 'strength.teamTier.insufficient'
 
 export interface SonaGameStrengthScore {
   gameId: number
@@ -62,6 +90,7 @@ export interface SonaPlayerStrengthScore {
   rawScore: number
   confidence: number
   validGames: number
+  /** 0-1 的加权胜率；展示层需要自行乘以 100。 */
   winRate: number
   averageKda: number
   averageKillParticipation: number
@@ -72,6 +101,14 @@ export interface SonaPlayerStrengthScore {
   gradeLabel: string
   verdict: string
   breakdown: SonaScoreBreakdown
+  /** breakdown 中最高两项（只比较实际存在的维度）。 */
+  strengths?: BreakdownKey[]
+  /** breakdown 中最低两项；整体均衡时为空数组。 */
+  weaknesses?: BreakdownKey[]
+  /** 绝对档位称号；样本不足时为 strength.teamTier.insufficient。 */
+  titleKey?: SonaTeamPowerTitleKey
+  /** 可直接展示的样本量与置信度说明。 */
+  sampleLabel?: string
   games: SonaGameStrengthScore[]
 }
 
@@ -100,8 +137,7 @@ export interface SonaStrengthScoreOptions {
   skipAfkTeammate: boolean
 }
 
-type BreakdownKey = keyof SonaScoreBreakdown
-type ScoreWeights = Record<BreakdownKey, number>
+type ScoreWeights = Partial<Record<BreakdownKey, number>>
 
 const INTERNAL_MIN_SCORE = 0
 const INTERNAL_MAX_SCORE = 100
@@ -122,14 +158,49 @@ const DEFAULT_OPTIONS: SonaStrengthScoreOptions = {
 }
 
 const BASE_WEIGHTS: ScoreWeights = {
-  combat: 0.26,
-  win: 0.12,
-  damage: 0.18,
-  economy: 0.11,
-  objectives: 0.1,
-  vision: 0.08,
-  durability: 0.09,
-  farming: 0.06,
+  combat: 0.2,
+  win: 0.11,
+  damage: 0.15,
+  economy: 0.08,
+  objectives: 0.08,
+  vision: 0.06,
+  durability: 0.07,
+  farming: 0.05,
+  lanePressure: 0.08,
+  clutch: 0.07,
+  teamUtility: 0.05,
+}
+
+const BREAKDOWN_KEYS: BreakdownKey[] = [
+  'combat',
+  'win',
+  'damage',
+  'economy',
+  'objectives',
+  'vision',
+  'durability',
+  'farming',
+  'lanePressure',
+  'clutch',
+  'teamUtility',
+]
+
+/** 强项与短板分差低于该值时视为均衡，不强行给短板。 */
+const HIGHLIGHT_BALANCE_THRESHOLD = 8
+
+/**
+ * 位置乘数只放大/缩小维度分，不改变权重总和。
+ * 大乱斗/斗魂的对位压制本身缺省，权重会自动重新归一化。
+ */
+const ROLE_DIMENSION_MULTIPLIERS: Record<SonaStrengthRole, Partial<Record<BreakdownKey, number>>> = {
+  TOP: { durability: 1.15, economy: 1.1, teamUtility: 1.05 },
+  JUNGLE: { objectives: 1.2, combat: 1.1, lanePressure: 1.15 },
+  MIDDLE: { damage: 1.15, combat: 1.05, lanePressure: 1.1 },
+  BOTTOM: { damage: 1.15, farming: 1.1, durability: 1.05 },
+  UTILITY: { vision: 1.25, teamUtility: 1.3, damage: 0.75, farming: 0.6 },
+  ARAM: { farming: 0.5, vision: 0.6, teamUtility: 1.2, damage: 1.1 },
+  SPECIAL: { farming: 0.6, vision: 0.7, teamUtility: 1.1 },
+  UNKNOWN: {},
 }
 
 function getGradeLabel(grade: SonaStrengthGrade): string {
@@ -170,6 +241,10 @@ export function calculateSonaPlayerStrengthScore(
     DISPLAY_MAX_SCORE,
   )
   const grade = getSonaStrengthGrade(score)
+  const breakdown = averageBreakdown(gameScores, recencyWeights)
+  const highlights = getScoreHighlights(breakdown)
+
+  warnIfInvalidBreakdown(breakdown, '玩家聚合')
 
   return {
     puuid,
@@ -189,7 +264,14 @@ export function calculateSonaPlayerStrengthScore(
     grade,
     gradeLabel: getGradeLabel(grade),
     verdict: getSonaStrengthVerdict(score, confidence),
-    breakdown: averageBreakdown(gameScores, recencyWeights),
+    breakdown,
+    strengths: highlights.strengths,
+    weaknesses: highlights.weaknesses,
+    titleKey: getTeamPowerTitleKey(score, confidence, gameScores.length),
+    sampleLabel: translate('strength.sample', {
+      games: gameScores.length,
+      confidence: Math.round(confidence * 100),
+    }),
     games: gameScores,
   }
 }
@@ -250,8 +332,9 @@ export function calculateSonaGameStrengthScore(
   const csPerMinute = safeDivide(participant.totalMinionsKilled + participant.neutralMinionsKilled, minutes)
   const visionPerMinute = getChallengeNumber(participant, 'visionScorePerMinute') ||
     safeDivide(participant.visionScore, minutes)
+  const laneOpponent = findLaneOpponent(game, participant)
 
-  const breakdown: SonaScoreBreakdown = {
+  const breakdown = applyRoleMultipliers({
     combat: calculateCombatScore({ kda, killParticipation, deaths, minutes }),
     win: calculateWinScore(game, participant),
     damage: calculateDamageScore(role, participant, minutes, damageShare),
@@ -260,7 +343,12 @@ export function calculateSonaGameStrengthScore(
     vision: calculateVisionScore(role, participant, minutes, visionPerMinute),
     durability: calculateDurabilityScore(role, participant, minutes, damageTakenShare),
     farming: calculateFarmingScore(role, csPerMinute),
-  }
+    lanePressure: calculateLanePressureScore(role, participant, laneOpponent, minutes) ?? undefined,
+    clutch: calculateClutchScore(participant, minutes) ?? undefined,
+    teamUtility: calculateTeamUtilityScore(role, participant, minutes) ?? undefined,
+  }, role)
+
+  warnIfInvalidBreakdown(breakdown, `对局 ${game.json.gameId}`)
 
   return {
     gameId: game.json.gameId,
@@ -365,9 +453,64 @@ export function formatSonaStrengthScoreLine(score: SonaPlayerStrengthScore): str
   })
 }
 
+/**
+ * 称号改为绝对分数档位，不再按队内排名强制分配。
+ * 样本不足或置信度过低时统一返回「数据不足」。
+ *
+ * 档位与 grade 语义对齐：
+ *   15.0+ legendary -> ace
+ *   13.5+ carry     -> high
+ *   10.8+ reliable  -> mid
+ *   8.0+  balanced/unstable -> low
+ *   <8.0  risky/critical    -> burden
+ */
+export function getTeamPowerTitleKey(
+  score: number,
+  confidence: number,
+  validGames: number,
+): SonaTeamPowerTitleKey {
+  if (validGames < 5 || confidence < 0.5) return 'strength.teamTier.insufficient'
+  if (score >= 15.0) return 'strength.teamTier.ace'
+  if (score >= 13.5) return 'strength.teamTier.high'
+  if (score >= 10.8) return 'strength.teamTier.mid'
+  if (score >= 8.0) return 'strength.teamTier.low'
+  return 'strength.teamTier.burden'
+}
+
+/**
+ * 取 breakdown 中实际存在的维度：最高两项为强项，最低两项为短板。
+ * 最高与最低分差小于 8 分时视为均衡，短板为空。
+ */
+export function getScoreHighlights(breakdown: SonaScoreBreakdown): {
+  strengths: BreakdownKey[]
+  weaknesses: BreakdownKey[]
+} {
+  const entries = BREAKDOWN_KEYS
+    .map((key) => [key, breakdown[key]] as const)
+    .filter((entry): entry is readonly [BreakdownKey, number] => isFiniteScore(entry[1]))
+    .sort((a, b) => b[1] - a[1])
+
+  if (entries.length < 4) {
+    return { strengths: entries.slice(0, 2).map((entry) => entry[0]), weaknesses: [] }
+  }
+
+  const spread = entries[0][1] - entries[entries.length - 1][1]
+  return {
+    strengths: entries.slice(0, 2).map((entry) => entry[0]),
+    weaknesses: spread < HIGHLIGHT_BALANCE_THRESHOLD
+      ? []
+      : entries.slice(-2).map((entry) => entry[0]),
+  }
+}
+
+export function getSonaStrengthDimensionLabel(key: BreakdownKey): string {
+  return translate(`strength.dimension.${key}` as TranslationKey)
+}
+
 function inferStrengthRole(game: SgpGameSummaryLol, participant: SgpParticipantLol): SonaStrengthRole {
   const mode = game.json.gameMode
-  if (mode === 'ARAM') return 'ARAM'
+  // KIWI（海克斯大乱斗）没有稳定对线关系，按 ARAM 处理，避免误算对位压制。
+  if (mode === 'ARAM' || mode === 'KIWI') return 'ARAM'
   if (mode === 'CHERRY' || mode === 'STRAWBERRY') return 'SPECIAL'
 
   const position = (participant.teamPosition || participant.individualPosition || participant.lane || '').toUpperCase()
@@ -467,7 +610,7 @@ function calculateObjectiveScore(
   const epicTakedowns =
     getChallengeNumber(participant, 'dragonTakedowns') +
     getChallengeNumber(participant, 'baronTakedowns')
-  const turretTakedowns = getChallengeNumber(participant, 'turretTakedowns') || participant.turretTakedowns
+  const turretTakedowns = getChallengeNumber(participant, 'turretTakedowns') || safeNumber(participant.turretTakedowns)
   const objectiveTarget = role === 'JUNGLE' ? 360 : role === 'BOTTOM' ? 290 : 230
 
   const objectiveDamageScore = scoreRange(objectiveDamagePerMinute, 20, objectiveTarget)
@@ -517,17 +660,20 @@ function calculateDurabilityScore(
   const survivalScore = 1 - scoreRange(deathsPerMinute, 0.16, 0.7)
   const pressureTarget = role === 'TOP' || role === 'UTILITY' ? 0.32 : 0.24
   const pressureScore = scoreRange(damageTakenShare, 0.08, pressureTarget)
-  const utilityPerMinute = safeDivide(
-    participant.damageSelfMitigated +
-      participant.totalHeal * 0.35 +
-      participant.totalHealsOnTeammates * 0.8 +
-      participant.totalDamageShieldedOnTeammates,
+  // 团队治疗/护盾已移到 teamUtility，避免重复计分；这里只保留自我减伤与自我回复。
+  // totalHeal 包含对队友的治疗，需扣掉 totalHealsOnTeammates 后再计入生存维度。
+  const selfHeal = Math.max(
+    0,
+    safeNumber(participant.totalHeal) - safeNumber(participant.totalHealsOnTeammates),
+  )
+  const sustainPerMinute = safeDivide(
+    safeNumber(participant.damageSelfMitigated) + selfHeal * 0.35,
     minutes,
   )
   const utilityTarget = role === 'UTILITY' || role === 'TOP' ? 820 : 560
-  const utilityScore = scoreRange(utilityPerMinute, utilityTarget * 0.18, utilityTarget)
+  const sustainedScore = scoreRange(sustainPerMinute, utilityTarget * 0.18, utilityTarget)
 
-  return toPercent(survivalScore * 0.46 + pressureScore * 0.32 + utilityScore * 0.22)
+  return toPercent(survivalScore * 0.46 + pressureScore * 0.32 + sustainedScore * 0.22)
 }
 
 function calculateFarmingScore(role: SonaStrengthRole, csPerMinute: number): number {
@@ -544,31 +690,264 @@ function calculateFarmingScore(role: SonaStrengthRole, csPerMinute: number): num
   return toPercent(scoreRange(csPerMinute, target * 0.35, target))
 }
 
+type LanePressureMetric = 'gold' | 'experience' | 'cs' | 'damage' | 'vision' | 'killParticipation'
+
+const LANE_PRESSURE_WEIGHTS: Record<SonaStrengthRole, Record<LanePressureMetric, number>> = {
+  TOP: { gold: 0.22, experience: 0.18, cs: 0.2, damage: 0.18, vision: 0.1, killParticipation: 0.12 },
+  JUNGLE: { gold: 0.18, experience: 0.15, cs: 0.1, damage: 0.17, vision: 0.2, killParticipation: 0.2 },
+  MIDDLE: { gold: 0.2, experience: 0.16, cs: 0.18, damage: 0.22, vision: 0.1, killParticipation: 0.14 },
+  BOTTOM: { gold: 0.22, experience: 0.12, cs: 0.22, damage: 0.24, vision: 0.06, killParticipation: 0.14 },
+  UTILITY: { gold: 0.12, experience: 0.08, cs: 0.06, damage: 0.16, vision: 0.3, killParticipation: 0.28 },
+  ARAM: { gold: 0.2, experience: 0.14, cs: 0.16, damage: 0.22, vision: 0.1, killParticipation: 0.18 },
+  SPECIAL: { gold: 0.2, experience: 0.14, cs: 0.16, damage: 0.22, vision: 0.1, killParticipation: 0.18 },
+  UNKNOWN: { gold: 0.2, experience: 0.14, cs: 0.16, damage: 0.2, vision: 0.12, killParticipation: 0.18 },
+}
+
+/** 找到敌方同位置玩家；优先 teamPosition，其次 individualPosition / lane。 */
+function findLaneOpponent(game: SgpGameSummaryLol, participant: SgpParticipantLol): SgpParticipantLol | null {
+  const position = getComparablePosition(participant)
+  if (!position) return null
+
+  return game.json.participants.find((item) => {
+    return item.teamId !== participant.teamId && getComparablePosition(item) === position
+  }) ?? null
+}
+
+function getComparablePosition(participant: SgpParticipantLol): string {
+  return normalizePosition(participant.teamPosition)
+    || normalizePosition(participant.individualPosition)
+    || normalizePosition(participant.lane)
+}
+
+function normalizePosition(value: string | undefined): string {
+  const normalized = (value ?? '').toUpperCase()
+  if (normalized === 'TOP') return 'TOP'
+  if (normalized === 'JUNGLE') return 'JUNGLE'
+  if (normalized === 'MIDDLE' || normalized === 'MID') return 'MIDDLE'
+  if (normalized === 'BOTTOM' || normalized === 'BOT') return 'BOTTOM'
+  if (normalized === 'UTILITY' || normalized === 'SUPPORT') return 'UTILITY'
+  return ''
+}
+
+/**
+ * 对位压制：跨队同位置比较经济、经验、补刀、伤害、视野和参团率。
+ * 大乱斗/斗魂没有稳定对线关系，直接缺省。
+ */
+function calculateLanePressureScore(
+  role: SonaStrengthRole,
+  participant: SgpParticipantLol,
+  opponent: SgpParticipantLol | null,
+  minutes: number,
+): number | null {
+  if (role === 'ARAM' || role === 'SPECIAL' || !opponent) return null
+
+  const participantExperience = safeNumber(participant.champExperience)
+  const opponentExperience = safeNumber(opponent.champExperience)
+  const participantCs = safeNumber(participant.totalMinionsKilled) + safeNumber(participant.neutralMinionsKilled)
+  const opponentCs = safeNumber(opponent.totalMinionsKilled) + safeNumber(opponent.neutralMinionsKilled)
+  const participantKp = getChallengeNumberOrNull(participant, 'killParticipation')
+  const opponentKp = getChallengeNumberOrNull(opponent, 'killParticipation')
+  const weights = LANE_PRESSURE_WEIGHTS[role] ?? LANE_PRESSURE_WEIGHTS.UNKNOWN
+
+  const samples: Array<{ metric: LanePressureMetric; diff: number; range: number }> = [
+    {
+      metric: 'gold',
+      diff: safeDivide(participant.goldEarned - opponent.goldEarned, minutes),
+      range: role === 'UTILITY' ? 90 : 130,
+    },
+    {
+      metric: 'cs',
+      diff: safeDivide(participantCs - opponentCs, minutes),
+      range: 1.8,
+    },
+  ]
+
+  if (participantExperience > 0 || opponentExperience > 0) {
+    samples.push({
+      metric: 'experience',
+      diff: safeDivide(participantExperience - opponentExperience, minutes),
+      range: 100,
+    })
+  }
+
+  if (safeNumber(participant.totalDamageDealtToChampions) > 0 || safeNumber(opponent.totalDamageDealtToChampions) > 0) {
+    samples.push({
+      metric: 'damage',
+      diff: safeDivide(participant.totalDamageDealtToChampions - opponent.totalDamageDealtToChampions, minutes),
+      range: role === 'UTILITY' ? 120 : 200,
+    })
+  }
+
+  if (safeNumber(participant.visionScore) > 0 || safeNumber(opponent.visionScore) > 0) {
+    samples.push({
+      metric: 'vision',
+      diff: safeDivide(participant.visionScore - opponent.visionScore, minutes),
+      range: role === 'UTILITY' ? 0.7 : 0.45,
+    })
+  }
+
+  if (participantKp !== null && opponentKp !== null) {
+    samples.push({ metric: 'killParticipation', diff: participantKp - opponentKp, range: 0.18 })
+  }
+
+  let weightedTotal = 0
+  let weightTotal = 0
+  for (const sample of samples) {
+    const weight = weights[sample.metric] ?? 0
+    if (weight <= 0) continue
+    weightedTotal += centeredScore(sample.diff, sample.range) * weight
+    weightTotal += weight
+  }
+
+  if (weightTotal <= 0) return null
+  return clamp(weightedTotal / weightTotal, INTERNAL_MIN_SCORE, INTERNAL_MAX_SCORE)
+}
+
+/** 关键击杀：多杀、单杀、以少打多、传奇和连杀，按分钟归一化。 */
+function calculateClutchScore(participant: SgpParticipantLol, minutes: number): number | null {
+  const doubleKills = safeNumber(participant.doubleKills)
+  const tripleKills = safeNumber(participant.tripleKills)
+  const quadraKills = safeNumber(participant.quadraKills)
+  const pentaKills = safeNumber(participant.pentaKills)
+  const unrealKills = safeNumber(participant.unrealKills)
+  const largestMultiKill = safeNumber(participant.largestMultiKill)
+  const largestKillingSpree = safeNumber(participant.largestKillingSpree)
+  const challengeKeys = ['legendaryCount', 'soloKills', 'outnumberedKills', 'killingSprees'] as const
+  const hasChallengeData = challengeKeys.some((key) => getChallengeNumberOrNull(participant, key) !== null)
+  const hasMultiKillData = [
+    doubleKills,
+    tripleKills,
+    quadraKills,
+    pentaKills,
+    unrealKills,
+    largestMultiKill,
+    largestKillingSpree,
+  ].some((value) => value > 0)
+
+  // LCU 回退数据缺少 challenges 时不应把「缺失」当成 0 分。
+  if (!hasChallengeData && !hasMultiKillData) return null
+
+  const sprees = getChallengeNumberOrNull(participant, 'killingSprees') ?? safeNumber(participant.killingSprees)
+  const multiKillPoints = doubleKills + tripleKills * 1.6 + quadraKills * 2.4 + pentaKills * 4 + unrealKills * 6
+  const largestMultiKillBonus = Math.max(0, largestMultiKill - 1) * 0.8
+  const clutchKills =
+    getChallengeNumber(participant, 'legendaryCount') * 2.2 +
+    getChallengeNumber(participant, 'soloKills') * 1.1 +
+    getChallengeNumber(participant, 'outnumberedKills') * 1.4 +
+    sprees * 0.5 +
+    largestKillingSpree * 0.4
+  const perMinute = safeDivide(multiKillPoints + largestMultiKillBonus + clutchKills, minutes)
+
+  return toPercent(scoreRange(perMinute, 0.01, 0.26))
+}
+
+/** 团队功能：控制时长与团队治疗/护盾，按位置调整目标。 */
+function calculateTeamUtilityScore(
+  role: SonaStrengthRole,
+  participant: SgpParticipantLol,
+  minutes: number,
+): number | null {
+  const ccSeconds = Math.max(safeNumber(participant.timeCCingOthers), safeNumber(participant.totalTimeCCDealt))
+  const teamHealShield = safeNumber(participant.totalHealsOnTeammates) +
+    safeNumber(participant.totalDamageShieldedOnTeammates)
+  const challengeValue = getChallengeNumberOrNull(participant, 'effectiveHealAndShielding')
+
+  // SGP 正常返回时 challenges 字段存在（即使为 0 也是有效数据）；
+  // LCU 回退数据所有来源都为 0 时视为缺失，返回 null。
+  if (challengeValue === null && teamHealShield <= 0 && ccSeconds <= 0) return null
+
+  // 优先使用只统计队友的治疗/护盾，避免把自我回复算进团队功能。
+  const healShield = teamHealShield > 0 ? teamHealShield : (challengeValue ?? 0)
+  const ccTarget = getRoleTarget(role, {
+    TOP: 5.5,
+    JUNGLE: 5,
+    MIDDLE: 4,
+    BOTTOM: 3,
+    UTILITY: 5,
+    ARAM: 4.5,
+    SPECIAL: 4,
+    UNKNOWN: 4.5,
+  })
+  const healTarget = getRoleTarget(role, {
+    TOP: 180,
+    JUNGLE: 160,
+    MIDDLE: 130,
+    BOTTOM: 120,
+    UTILITY: 320,
+    ARAM: 200,
+    SPECIAL: 140,
+    UNKNOWN: 160,
+  })
+  const ccScore = scoreRange(safeDivide(ccSeconds, minutes), 0.2, ccTarget)
+  const healScore = scoreRange(safeDivide(healShield, minutes), 8, healTarget)
+  const healWeight = role === 'UTILITY' ? 0.65 : role === 'BOTTOM' ? 0.55 : 0.45
+
+  return toPercent(ccScore * (1 - healWeight) + healScore * healWeight)
+}
+
+function applyRoleMultipliers(
+  breakdown: SonaScoreBreakdown,
+  role: SonaStrengthRole,
+): SonaScoreBreakdown {
+  const multipliers = ROLE_DIMENSION_MULTIPLIERS[role] ?? ROLE_DIMENSION_MULTIPLIERS.UNKNOWN
+  const result: Partial<Record<BreakdownKey, number>> = { ...breakdown }
+
+  for (const key of BREAKDOWN_KEYS) {
+    const multiplier = multipliers[key]
+    const value = result[key]
+    if (multiplier == null || value == null) continue
+    result[key] = clamp(value * multiplier, INTERNAL_MIN_SCORE, INTERNAL_MAX_SCORE)
+  }
+
+  return result as SonaScoreBreakdown
+}
+
 function calculateWeightedBreakdownScore(breakdown: SonaScoreBreakdown, weights: ScoreWeights): number {
-  return clamp(
-    Object.entries(weights).reduce((total, [key, weight]) => {
-      return total + breakdown[key as BreakdownKey] * weight
-    }, 0),
-    0,
-    100,
-  )
+  let weightedTotal = 0
+  let weightTotal = 0
+
+  for (const [key, weight] of Object.entries(weights)) {
+    if (weight == null || weight <= 0) continue
+    const value = breakdown[key as BreakdownKey]
+    if (value == null || !Number.isFinite(value)) continue
+    weightedTotal += value * weight
+    weightTotal += weight
+  }
+
+  // 缺失维度（大乱斗对位压制、回退数据缺少 challenges）按实际参与维度重新归一化。
+  if (weightTotal <= 0) return INTERNAL_NEUTRAL_SCORE
+  return clamp(weightedTotal / weightTotal, 0, 100)
 }
 
 function averageBreakdown(games: SonaGameStrengthScore[], weights: number[]): SonaScoreBreakdown {
-  const result = Object.keys(BASE_WEIGHTS).reduce((obj, key) => {
-    obj[key as BreakdownKey] = weightedAverage(games.map((game) => game.breakdown[key as BreakdownKey]), weights)
-    return obj
-  }, {} as SonaScoreBreakdown)
+  const result: Partial<Record<BreakdownKey, number>> = {}
 
-  return result
+  for (const key of BREAKDOWN_KEYS) {
+    const values: number[] = []
+    const sampleWeights: number[] = []
+
+    games.forEach((game, index) => {
+      const value = game.breakdown[key]
+      if (!isFiniteScore(value)) return
+      values.push(value)
+      sampleWeights.push(weights[index] ?? 1)
+    })
+
+    // 全部缺失时省略该字段，绝不把 undefined 当 0 参与加权。
+    if (values.length > 0) {
+      result[key] = weightedAverage(values, sampleWeights)
+    }
+  }
+
+  return result as SonaScoreBreakdown
 }
 
 function normalizeWeights(weights: ScoreWeights): ScoreWeights {
-  const total = sum(Object.values(weights), (value) => value)
+  const total = Object.values(weights).reduce<number>((sumValue, value) => sumValue + (value ?? 0), 0)
   if (total <= 0) return BASE_WEIGHTS
 
   return Object.entries(weights).reduce((obj, [key, value]) => {
-    obj[key as BreakdownKey] = value / total
+    obj[key as BreakdownKey] = (value ?? 0) / total
     return obj
   }, {} as ScoreWeights)
 }
@@ -654,8 +1033,35 @@ function sum<T>(values: T[], mapper: (value: T) => number): number {
 }
 
 function getChallengeNumber(participant: SgpParticipantLol, key: string): number {
+  return getChallengeNumberOrNull(participant, key) ?? 0
+}
+
+/** 区分「字段缺失」与「字段值为 0」。 */
+function getChallengeNumberOrNull(participant: SgpParticipantLol, key: string): number | null {
   const value = participant.challenges?.[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function isFiniteScore(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+/** 开发模式下捕获 NaN/Infinity，避免脏数据进入 UI。 */
+function warnIfInvalidBreakdown(breakdown: SonaScoreBreakdown, context: string): void {
+  if (!isDevEnvironment()) return
+
+  const invalidKeys = BREAKDOWN_KEYS.filter((key) => {
+    const value = breakdown[key]
+    return value != null && !Number.isFinite(value)
+  })
+  if (invalidKeys.length > 0) {
+    console.warn(`[StrengthScore] ${context} breakdown 出现非法维度分数:`, invalidKeys)
+  }
+}
+
+function isDevEnvironment(): boolean {
+  const env = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env
+  return Boolean(env?.DEV)
 }
 
 function getChallengeFlag(participant: SgpParticipantLol, key: string): boolean {
@@ -692,8 +1098,18 @@ function scoreRange(value: number, zeroAt: number, fullAt: number): number {
   return clamp((value - zeroAt) / (fullAt - zeroAt), 0, 1)
 }
 
+/** 把「我方 - 敌方」差值映射到 0-100，0 差值等于中性分 50。 */
+function centeredScore(diff: number, range: number): number {
+  if (range <= 0) return INTERNAL_NEUTRAL_SCORE
+  return clamp(
+    INTERNAL_NEUTRAL_SCORE + (diff / range) * INTERNAL_NEUTRAL_SCORE,
+    INTERNAL_MIN_SCORE,
+    INTERNAL_MAX_SCORE,
+  )
+}
+
 function safeDivide(numerator: number, denominator: number): number {
-  return denominator > 0 ? numerator / denominator : 0
+  return denominator > 0 && Number.isFinite(numerator) ? numerator / denominator : 0
 }
 
 function safeNumber(value: number): number {
