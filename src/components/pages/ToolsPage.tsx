@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { SettingCard, SettingGroup } from '@/components/ui/SettingCard'
 import { SonaButton } from '@/components/ui/SonaButton'
 import { SonaInput } from '@/components/ui/SonaInput'
 import { SonaSwitch } from '@/components/ui/SonaSwitch'
 import { SonaSelect } from '@/components/ui/SonaSelect'
 import { MatchHistoryModal } from '@/components/ui/MatchHistoryModal'
+import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
 import { searchChampions, getChampionById, getPlayableQueues, type ChampionInfo } from '@/lib/assets'
+import { PLAYER_NOTE_OBFUSCATED_PREFIX, removePlayerNote, searchPlayerNotes, togglePlayerBlacklist } from '@/lib/player-notes'
 import { lcu, type ChatFriend } from '@/lib/lcu'
 import { logger } from '@/index'
 import { store } from '@/lib/store'
@@ -160,6 +162,10 @@ export function ToolsPage() {
   const [balanceBuffTooltip, setBalanceBuffTooltip] = useState(store.get('balanceBuffTooltip'))
   const [champSelectQuitButton, setChampSelectQuitButton] = useState(store.get('champSelectQuitButton'))
   const [gameAnalysisPopup, setGameAnalysisPopup] = useState(store.get('gameAnalysisPopup'))
+  const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
+  const [playerNotes, setPlayerNotes] = useState(store.get('playerNotes'))
+  const [playerNoteSearch, setPlayerNoteSearch] = useState('')
+  const [editingPlayerNoteKey, setEditingPlayerNoteKey] = useState<string | null>(null)
   const [autoReturnToLobby, setAutoReturnToLobby] = useState(store.get('autoReturnToLobby'))
   const [autoReturnMode, setAutoReturnMode] = useState(store.get('autoReturnMode'))
   const [analyzeTeamPower, setAnalyzeTeamPower] = useState(store.get('analyzeTeamPower'))
@@ -276,6 +282,24 @@ export function ToolsPage() {
     }
   }
 
+  const playerNoteEntries = useMemo(
+    () => searchPlayerNotes(playerNoteSearch),
+    [playerNotes, playerNoteSearch],
+  )
+  const editingPlayerNote = editingPlayerNoteKey ? playerNotes[editingPlayerNoteKey] : undefined
+  const editingPlayerNoteTarget = editingPlayerNoteKey
+    ? (editingPlayerNoteKey.startsWith(PLAYER_NOTE_OBFUSCATED_PREFIX)
+      ? {
+          obfuscatedPuuid: editingPlayerNoteKey.slice(PLAYER_NOTE_OBFUSCATED_PREFIX.length),
+          nameVisibilityType: 'HIDDEN',
+          displayName: editingPlayerNote?.displayName ?? '',
+        }
+      : {
+          puuid: editingPlayerNoteKey,
+          displayName: editingPlayerNote?.displayName ?? '',
+        })
+    : null
+
   useEffect(() => {
     const unsubs = [
       store.onChange('autoAcceptMatch', setAutoAccept),
@@ -301,6 +325,8 @@ export function ToolsPage() {
       store.onChange('balanceBuffTooltip', setBalanceBuffTooltip),
       store.onChange('champSelectQuitButton', setChampSelectQuitButton),
       store.onChange('gameAnalysisPopup', setGameAnalysisPopup),
+      store.onChange('playerNotesEnabled', setPlayerNotesEnabled),
+      store.onChange('playerNotes', setPlayerNotes),
       store.onChange('autoReturnToLobby', setAutoReturnToLobby),
       store.onChange('autoReturnMode', setAutoReturnMode),
       store.onChange('analyzeTeamPower', setAnalyzeTeamPower),
@@ -969,6 +995,70 @@ export function ToolsPage() {
             />
           </div>
         </SettingCard>
+        <SettingCard
+          title={t('playerNotes.title')}
+          description={t('playerNotes.description')}
+          layout="stacked"
+        >
+          <div className="spn-manage">
+            <div className="spn-manage-toolbar">
+              <SonaSwitch
+                checked={playerNotesEnabled}
+                onChange={(v) => { setPlayerNotesEnabled(v); store.set('playerNotesEnabled', v) }}
+              />
+              <SonaInput
+                value={playerNoteSearch}
+                onChange={setPlayerNoteSearch}
+                placeholder={t('playerNotes.searchPlaceholder')}
+              />
+            </div>
+            {playerNoteEntries.length === 0 ? (
+              <p className="spn-manage-empty">
+                {playerNoteSearch.trim() ? t('playerNotes.searchEmpty') : t('playerNotes.empty')}
+              </p>
+            ) : (
+              <ul className="spn-manage-list">
+                {playerNoteEntries.map(({ key, note }) => (
+                  <li key={key} className={`spn-manage-item${note.blacklisted ? ' spn-manage-item--black' : ''}`}>
+                    <div className="spn-manage-info">
+                      <div className="spn-manage-name-row">
+                        <span className="spn-manage-name">
+                          {note.displayName || t('playerNotes.unknownPlayer')}
+                        </span>
+                        {note.blacklisted ? <span className="spn-tag spn-tag--black">{t('playerNotes.blacklisted')}</span> : null}
+                        {note.anonymous ? <span className="spn-tag spn-tag--anon">{t('playerNotes.anonymousShort')}</span> : null}
+                      </div>
+                      {note.note ? <p className="spn-manage-note">{note.note}</p> : null}
+                    </div>
+                    <div className="spn-manage-actions">
+                      <button
+                        type="button"
+                        className="spn-link-btn"
+                        onClick={() => setEditingPlayerNoteKey(key)}
+                      >
+                        {t('playerNotes.edit')}
+                      </button>
+                      <button
+                        type="button"
+                        className="spn-link-btn"
+                        onClick={() => togglePlayerBlacklist(key)}
+                      >
+                        {note.blacklisted ? t('playerNotes.removeBlacklist') : t('playerNotes.blacklist')}
+                      </button>
+                      <button
+                        type="button"
+                        className="spn-link-btn spn-link-btn--danger"
+                        onClick={() => removePlayerNote(key)}
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SettingCard>
       </SettingGroup>
 
       <SettingGroup title={t('tools.group.interface')}>
@@ -1181,6 +1271,12 @@ export function ToolsPage() {
         <p className="sona-subtitle" style={{ marginBottom: 10 }}>{t('tools.backup.placeholder')}</p>
         <BackupManager />
       </SettingGroup>
+
+      <PlayerNoteEditor
+        open={Boolean(editingPlayerNoteKey)}
+        onClose={() => setEditingPlayerNoteKey(null)}
+        player={editingPlayerNoteTarget}
+      />
     </div>
   )
 }

@@ -202,3 +202,66 @@
 .game-in-progress-container [data-sona-opgg-ingame-build] + [data-sona-game-analysis] {
   margin-top: 8px;
 }
+
+/* 选人界面玩家备注 / 黑名单徽标 */
+.sona-player-note-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 170px;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 1px solid rgba(200, 170, 110, 0.65);
+  border-radius: 3px;
+  background: rgba(1, 10, 19, 0.78);
+  color: #c8aa6e;
+  font-size: 10px;
+  line-height: 14px;
+  font-family: inherit;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.sona-player-note-badge:hover {
+  border-color: #c8aa6e;
+  background: rgba(200, 170, 110, 0.16);
+}
+
+.sona-player-note-badge--blacklist {
+  border-color: rgba(232, 64, 87, 0.75);
+  color: #ff7b8a;
+}
+
+.sona-player-note-badge--blacklist:hover {
+  border-color: #e84057;
+  background: rgba(232, 64, 87, 0.18);
+}
+
+.sona-player-note-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 6px;
+}
+
+.sona-player-note-badge-label {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sona-player-note-badge-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f0e6d2;
+  opacity: 0.85;
+}
+
+.sona-player-note-badge-anon {
+  color: #a09b8c;
+  flex-shrink: 0;
+}

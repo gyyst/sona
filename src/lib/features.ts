@@ -30,6 +30,7 @@ import { applyRankDisguise, updateRankDisguise } from '@/lib/features/rank-disgu
 import { updateCustomProfileBg } from '@/lib/features/profile-background'
 import { updateCustomBanner } from '@/lib/features/custom-banner'
 import { updateGameAnalysisPopup } from '@/lib/features/game-analysis-popup'
+import { updatePlayerNotes } from '@/lib/features/player-notes'
 import { updateAutoReturnToLobby } from '@/lib/features/auto-return-to-lobby'
 import { updateAutoTransferOwner, refreshAutoTransferOwner } from '@/lib/features/auto-transfer-party-owner'
 import { updateOpggBuildRecommendation } from '@/lib/features/opgg-build-recommendation'
@@ -1224,6 +1225,9 @@ export function initFeatures() {
 
   updateGameAnalysisPopup(store.get('gameAnalysisPopup'))
   store.onChange('gameAnalysisPopup', updateGameAnalysisPopup)
+
+  updatePlayerNotes(store.get('playerNotesEnabled'))
+  store.onChange('playerNotesEnabled', updatePlayerNotes)
 
   updateAutoReturnToLobby(store.get('autoReturnToLobby'))
   store.onChange('autoReturnToLobby', updateAutoReturnToLobby)

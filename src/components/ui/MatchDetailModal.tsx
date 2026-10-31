@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { PlayerNoteBadge, PlayerNoteEditButton } from '@/components/ui/PlayerNoteBadge'
+import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
 import { lcu } from '@/lib/lcu'
+import { store } from '@/lib/store'
 import { getChampIcon, getItemIcon, getSpellIcon, getPerkIcon, getPerkStyleIcon, getQueueName, getMapName } from '@/lib/assets'
 import { translate, useI18n } from '@/i18n'
+import type { PlayerNote } from '@/lib/player-notes'
 import type { MatchDetail, Participant, ParticipantIdentity, MatchTeam } from '@/types/lcu'
 import blueTurretIcon from '@/../assets/game-statistic-icons/Blue_Turret_icon.png'
 import redTurretIcon from '@/../assets/game-statistic-icons/Red_Turret_icon.png'
@@ -172,6 +176,8 @@ function ParticipantRow({
   isRed,
   rankInfo,
   iconMaps,
+  note,
+  onEditNote,
 }: {
   participant: Participant
   identity?: ParticipantIdentity['player']
@@ -180,6 +186,8 @@ function ParticipantRow({
   isRed: boolean
   rankInfo?: RankInfo
   iconMaps: IconMaps
+  note?: PlayerNote
+  onEditNote?: (puuid: string, displayName: string) => void
 }) {
   const stats = participant.stats
   const items = [stats.item0, stats.item1, stats.item2, stats.item3, stats.item4, stats.item5]
@@ -204,7 +212,7 @@ function ParticipantRow({
   }
 
   return (
-    <div className={`smd-player-row${isRed ? ' smd-player-row--red' : ''}${highlighted ? ' smd-player-row--focus' : ''}${topDamage ? ' smd-player-row--top-damage' : ''}`}>
+    <div className={`smd-player-row${isRed ? ' smd-player-row--red' : ''}${highlighted ? ' smd-player-row--focus' : ''}${topDamage ? ' smd-player-row--top-damage' : ''}${note?.blacklisted ? ' spn-blacklisted-row' : ''}`}>
       <div className="smd-champ-block">
         <div className="smd-champ">
           <img src={getChampIcon(participant.championId)} alt="" />
@@ -220,9 +228,21 @@ function ParticipantRow({
       </div>
 
       <div className="smd-player-identity" title={name}>
-        <button className="smd-player-name" onClick={handleCopyName} type="button">
-          <span>{identity?.gameName ?? translate('matchDetail.playerFallback', { id: participant.participantId })}</span>
-        </button>
+        <div className="smd-player-name-line">
+          <button className="smd-player-name" onClick={handleCopyName} type="button">
+            <span>{identity?.gameName ?? translate('matchDetail.playerFallback', { id: participant.participantId })}</span>
+          </button>
+          {identity?.puuid && onEditNote ? (
+            <>
+              <PlayerNoteBadge
+                note={note}
+                compact
+                onClick={() => onEditNote(identity.puuid, name)}
+              />
+              <PlayerNoteEditButton onClick={() => onEditNote(identity.puuid, name)} />
+            </>
+          ) : null}
+        </div>
         <strong className="smd-kda">
           {renderKdaValue(stats.kills, stats.kills === maxKdaValue)}
           {' / '}
@@ -288,6 +308,28 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [playerNotes, setPlayerNotes] = useState<Record<string, PlayerNote>>(() => store.get('playerNotes'))
+  const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
+  const [editingNotePlayer, setEditingNotePlayer] = useState<{ puuid: string; displayName: string } | null>(null)
+
+  // 备注 / 黑名单变化时同步徽标；总开关关闭时不显示任何提示
+  useEffect(() => {
+    const unsubNotes = store.onChange('playerNotes', setPlayerNotes)
+    const unsubEnabled = store.onChange('playerNotesEnabled', setPlayerNotesEnabled)
+    return () => {
+      unsubNotes()
+      unsubEnabled()
+    }
+  }, [])
+
+  const handleEditNote = useCallback((puuid: string, displayName: string) => {
+    if (!puuid) return
+    setEditingNotePlayer({ puuid, displayName })
+  }, [])
+
+  useEffect(() => {
+    if (!playerNotesEnabled) setEditingNotePlayer(null)
+  }, [playerNotesEnabled])
 
   useEffect(() => {
     if (!open || !gameId) return
@@ -385,6 +427,8 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
                 isRed={isRed}
                 rankInfo={identity ? rankMap.get(identity.puuid) : undefined}
                 iconMaps={iconMaps}
+                note={playerNotesEnabled && identity?.puuid ? playerNotes[identity.puuid] : undefined}
+                onEditNote={playerNotesEnabled ? handleEditNote : undefined}
               />
             )
           })}
@@ -394,7 +438,8 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
   }
 
   return (
-    <Modal open={open} onClose={onClose} width={1240} height={640}>
+    <>
+      <Modal open={open} onClose={onClose} width={1240} height={640}>
       <div className="smd-container">
         <div className="smd-header">
           <div className="smd-title-line">
@@ -424,6 +469,12 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
           )}
         </div>
       </div>
-    </Modal>
+      </Modal>
+      <PlayerNoteEditor
+        open={Boolean(editingNotePlayer)}
+        onClose={() => setEditingNotePlayer(null)}
+        player={editingNotePlayer}
+      />
+    </>
   )
 }

@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback, useRef, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Modal } from '@/components/ui/Modal'
 import { MatchHistoryModal } from '@/components/ui/MatchHistoryModal'
+import { PlayerNoteBadge, PlayerNoteEditButton } from '@/components/ui/PlayerNoteBadge'
+import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
 import { lcu, queueIdToTag } from '@/lib/lcu'
 import { store } from '@/lib/store'
 import { getChampIcon } from '@/lib/assets'
 import { getRating } from '@/lib/features'
 import { filterSonaStrengthGamesByQueue, shouldSkipSonaStrengthGame } from '@/lib/player-strength-score'
+import type { PlayerNote } from '@/lib/player-notes'
 import { withTimeout } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { GameflowTeamPlayer, PlayerChampionSelection } from '@/types/lcu'
@@ -145,7 +148,29 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [premadeGroups, setPremadeGroups] = useState<Map<string, string>>(new Map())
+  const [playerNotes, setPlayerNotes] = useState<Record<string, PlayerNote>>(() => store.get('playerNotes'))
+  const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
+  const [editingNotePlayer, setEditingNotePlayer] = useState<{ puuid: string; displayName: string } | null>(null)
   const loadTokenRef = useRef(0)
+
+  // 备注 / 黑名单变化时同步徽标；总开关关闭时不显示任何提示
+  useEffect(() => {
+    const unsubNotes = store.onChange('playerNotes', setPlayerNotes)
+    const unsubEnabled = store.onChange('playerNotesEnabled', setPlayerNotesEnabled)
+    return () => {
+      unsubNotes()
+      unsubEnabled()
+    }
+  }, [])
+
+  const handleEditNote = useCallback((player: PlayerAnalysis) => {
+    if (!player.puuid) return
+    setEditingNotePlayer({ puuid: player.puuid, displayName: player.summonerName })
+  }, [])
+
+  useEffect(() => {
+    if (!playerNotesEnabled) setEditingNotePlayer(null)
+  }, [playerNotesEnabled])
 
   const loadAnalysis = useCallback(async () => {
     const loadToken = ++loadTokenRef.current
@@ -422,7 +447,8 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
   const redAvg = avgWinRate(redTeam)
 
   return (
-    <Modal open={open} onClose={onClose} width={1160} height={645} closable>
+    <>
+      <Modal open={open} onClose={onClose} width={1160} height={645} closable>
       <div className="sga-container">
         {/* Header */}
         <div className="sga-header">
@@ -467,7 +493,14 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
                 </div>
                 <div className="sga-team-players">
                   {blueTeam.map((p, i) => (
-                    <PlayerRow key={p.puuid || i} player={p} isRed={false} queueId={gameInfo?.queueId} />
+                    <PlayerRow
+                      key={p.puuid || i}
+                      player={p}
+                      isRed={false}
+                      queueId={gameInfo?.queueId}
+                      note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
+                      onEditNote={playerNotesEnabled ? handleEditNote : undefined}
+                    />
                   ))}
                 </div>
               </div>
@@ -484,7 +517,14 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
                 </div>
                 <div className="sga-team-players">
                   {redTeam.map((p, i) => (
-                    <PlayerRow key={p.puuid || i} player={p} isRed queueId={gameInfo?.queueId} />
+                    <PlayerRow
+                      key={p.puuid || i}
+                      player={p}
+                      isRed
+                      queueId={gameInfo?.queueId}
+                      note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
+                      onEditNote={playerNotesEnabled ? handleEditNote : undefined}
+                    />
                   ))}
                 </div>
               </div>
@@ -497,7 +537,13 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
 
 
       </div>
-    </Modal>
+      </Modal>
+      <PlayerNoteEditor
+        open={Boolean(editingNotePlayer)}
+        onClose={() => setEditingNotePlayer(null)}
+        player={editingNotePlayer}
+      />
+    </>
   )
 }
 
@@ -508,7 +554,13 @@ function renderKdaValue(val: number, isMax: boolean) {
   return isMax ? <span style={{ color: '#ff4444' }}>{text}</span> : text
 }
 
-function PlayerRow({ player, isRed, queueId }: { player: PlayerAnalysis; isRed: boolean; queueId?: number }) {
+function PlayerRow({ player, isRed, queueId, note, onEditNote }: {
+  player: PlayerAnalysis
+  isRed: boolean
+  queueId?: number
+  note?: PlayerNote
+  onEditNote?: (player: PlayerAnalysis) => void
+}) {
   const { t } = useI18n()
   const winRate = player.winRate
   // 胜率颜色
@@ -534,7 +586,7 @@ function PlayerRow({ player, isRed, queueId }: { player: PlayerAnalysis; isRed: 
 
   return (
     <div
-      className={`sga-player-wrapper ${isRed ? 'sga-player-wrapper--red' : ''} ${player.isBroadcaster ? 'sga-player-wrapper--broadcaster' : ''}`}
+      className={`sga-player-wrapper ${isRed ? 'sga-player-wrapper--red' : ''} ${player.isBroadcaster ? 'sga-player-wrapper--broadcaster' : ''}${note?.blacklisted ? ' spn-blacklisted-row' : ''}`}
       style={{
         ...(premadeBg ? { background: premadeBg } : {}),
       }}
@@ -564,6 +616,12 @@ function PlayerRow({ player, isRed, queueId }: { player: PlayerAnalysis; isRed: 
                 {t('gameAnalysis.premadeTeam', { group: premadeGroup })}
               </span>
             )}
+            {player.puuid && onEditNote ? (
+              <>
+                <PlayerNoteBadge note={note} compact onClick={() => onEditNote(player)} />
+                <PlayerNoteEditButton onClick={() => onEditNote(player)} />
+              </>
+            ) : null}
           </div>
           <span className="sga-player-rank" style={{ color: player.rankColor || '#5c5b57' }}>
             {isRed && player.rating ? <span className="sga-player-rating">{player.rating} · </span> : null}

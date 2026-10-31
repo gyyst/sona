@@ -19,6 +19,8 @@
  * ```
  */
 
+import type { PlayerNote } from '@/lib/player-notes'
+
 // ==================== 配置项定义 ====================
 
 /** 所有配置项及其类型 */
@@ -212,6 +214,10 @@ export interface SonaConfig {
   champSelectQuitButton: boolean
   /** 进入游戏后自动弹窗显示全局战力分析 */
   gameAnalysisPopup: boolean
+  /** 玩家备注 / 黑名单（本地记录，key 为真实 PUUID 或 obfuscated:<id>） */
+  playerNotesEnabled: boolean
+  /** 玩家备注数据：key 为玩家稳定标识 */
+  playerNotes: Record<string, PlayerNote>
   /** 对局结束后自动返回房间 */
   autoReturnToLobby: boolean
   /** 自动返回模式: queue=自动排队, lobby=仅返回房间 */
@@ -315,6 +321,8 @@ const DEFAULT_CONFIG: SonaConfig = {
   unlockChromas: true,
   champSelectQuitButton: false,
   gameAnalysisPopup: false,
+  playerNotesEnabled: true,
+  playerNotes: {},
   autoReturnToLobby: false,
   autoReturnMode: 'queue',
   autoTransferOwner: false,
