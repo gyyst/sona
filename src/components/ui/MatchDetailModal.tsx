@@ -1,16 +1,96 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { ItemPathSection } from '@/components/ui/match-detail/ItemPathSection'
+import { MatchTimelineSection } from '@/components/ui/match-detail/MatchTimelineSection'
+import { SkillOrderSection } from '@/components/ui/match-detail/SkillOrderSection'
+import { TeamOverviewSection } from '@/components/ui/match-detail/TeamOverviewSection'
+import type { DetailPlayer } from '@/components/ui/match-detail/types'
 import { PlayerNoteBadge, PlayerNoteEditButton } from '@/components/ui/PlayerNoteBadge'
 import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
 import { lcu } from '@/lib/lcu'
 import { store } from '@/lib/store'
 import { getChampIcon, getItemIcon, getSpellIcon, getPerkIcon, getPerkStyleIcon, getQueueName, getMapName } from '@/lib/assets'
+import { buildTeamOverview, groupItemPaths, groupSkillOrders, normalizeLcuTimeline, normalizeSgpDetails } from '@/lib/sgp-details'
+import type { NormalizedTimelineEvent } from '@/lib/sgp-details'
 import { translate, useI18n } from '@/i18n'
 import type { PlayerNote } from '@/lib/player-notes'
+import type { SgpGameDetailsLol } from '@/types/sgp'
 import type { MatchDetail, Participant, ParticipantIdentity, MatchTeam } from '@/types/lcu'
 import blueTurretIcon from '@/../assets/game-statistic-icons/Blue_Turret_icon.png'
 import redTurretIcon from '@/../assets/game-statistic-icons/Red_Turret_icon.png'
 import '@/styles/MatchDetailModal.css'
+
+type DetailTab = 'overview' | 'timeline' | 'items' | 'skills' | 'teams'
+type TimelineSource = 'sgp' | 'lcu' | 'none'
+
+interface TimelineResult {
+  source: TimelineSource
+  details: SgpGameDetailsLol | null
+  events: NormalizedTimelineEvent[]
+}
+
+const TIMELINE_CACHE_TTL_MS = 5 * 60 * 1000
+const timelineCache = new Map<number, { result: TimelineResult; fetchedAt: number }>()
+const timelineInflight = new Map<number, Promise<TimelineResult>>()
+
+/**
+ * 按需加载时间轴：SGP DETAILS 优先，失败后回退 LCU game-timelines。
+ *
+ * 同一局结果缓存 5 分钟，并用进行中 Promise 去重，重复打开详情不会重复请求。
+ */
+async function loadTimelineData(gameId: number): Promise<TimelineResult> {
+  const now = Date.now()
+  // 及时清理过期缓存，避免 DETAILS 大对象在长时间会话里无限堆积
+  for (const [id, entry] of timelineCache) {
+    if (now - entry.fetchedAt >= TIMELINE_CACHE_TTL_MS) timelineCache.delete(id)
+  }
+
+  const cached = timelineCache.get(gameId)
+  if (cached && now - cached.fetchedAt < TIMELINE_CACHE_TTL_MS) {
+    return cached.result
+  }
+
+  const inflight = timelineInflight.get(gameId)
+  if (inflight) return inflight
+
+  const promise = (async (): Promise<TimelineResult> => {
+    let result: TimelineResult = { source: 'none', details: null, events: [] }
+
+    try {
+      const matchId = await lcu.resolveSgpMatchId(gameId)
+      if (matchId) {
+        const details = await lcu.getSgpGameDetails(matchId)
+        if (details) {
+          const events = normalizeSgpDetails(details)
+          if (events.length > 0) {
+            result = { source: 'sgp', details, events }
+          }
+        }
+      }
+
+      // DETAILS 不可用或没有事件时，回退 LCU timeline（只有击杀/目标/建筑）
+      if (result.source === 'none') {
+        const rawTimeline = await lcu.getMatchTimeline(gameId).catch(() => null)
+        const events = normalizeLcuTimeline(rawTimeline)
+        if (events.length > 0) {
+          result = { source: 'lcu', details: null, events }
+        }
+      }
+    } catch (err) {
+      console.warn('[MatchDetail] 时间轴加载失败，仅展示概览:', err)
+    }
+
+    timelineCache.set(gameId, { result, fetchedAt: Date.now() })
+    return result
+  })()
+
+  timelineInflight.set(gameId, promise)
+  try {
+    return await promise
+  } finally {
+    timelineInflight.delete(gameId)
+  }
+}
 
 type RankInfo = {
   rankText: string
@@ -311,6 +391,9 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
   const [playerNotes, setPlayerNotes] = useState<Record<string, PlayerNote>>(() => store.get('playerNotes'))
   const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
   const [editingNotePlayer, setEditingNotePlayer] = useState<{ puuid: string; displayName: string } | null>(null)
+  const [tab, setTab] = useState<DetailTab>('overview')
+  const [timeline, setTimeline] = useState<TimelineResult | null>(null)
+  const [timelineLoading, setTimelineLoading] = useState(false)
 
   // 备注 / 黑名单变化时同步徽标；总开关关闭时不显示任何提示
   useEffect(() => {
@@ -362,6 +445,36 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
     }
   }, [open, gameId, t])
 
+  // 时间轴独立加载，不阻塞概览渲染；关闭后忽略过期结果
+  useEffect(() => {
+    if (!open || !gameId) {
+      setTimeline(null)
+      setTimelineLoading(false)
+      setTab('overview')
+      return
+    }
+
+    let cancelled = false
+    setTimeline(null)
+    setTimelineLoading(true)
+    setTab('overview')
+
+    loadTimelineData(gameId)
+      .then((result) => {
+        if (!cancelled) setTimeline(result)
+      })
+      .catch(() => {
+        if (!cancelled) setTimeline({ source: 'none', details: null, events: [] })
+      })
+      .finally(() => {
+        if (!cancelled) setTimelineLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, gameId])
+
   useEffect(() => {
     if (!open) return
 
@@ -400,6 +513,53 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
   const maxDamage = useMemo(() => {
     return Math.max(0, ...(detail?.participants.map((p) => p.stats.totalDamageDealtToChampions) ?? [0]))
   }, [detail])
+
+  const players = useMemo<DetailPlayer[]>(() => {
+    return (detail?.participants ?? []).map((participant) => {
+      const identity = identityMap.get(participant.participantId)?.player
+      return {
+        participantId: participant.participantId,
+        name: identity
+          ? `${identity.gameName}#${identity.tagLine}`
+          : t('matchDetail.playerFallback', { id: participant.participantId }),
+        championId: participant.championId,
+        teamId: participant.teamId,
+      }
+    })
+  }, [detail, identityMap, t])
+
+  const itemPaths = useMemo(() => groupItemPaths(timeline?.events ?? []), [timeline])
+  const skillOrders = useMemo(() => groupSkillOrders(timeline?.events ?? []), [timeline])
+  const hasTimelineEvents = useMemo(
+    () => (timeline?.events ?? []).some((event) => event.kind !== 'item' && event.kind !== 'skill'),
+    [timeline],
+  )
+  const teamOverview = useMemo(
+    () => buildTeamOverview(timeline?.details, detail),
+    [timeline, detail],
+  )
+
+  const tabs = useMemo(() => {
+    const items: { id: DetailTab; label: string }[] = [
+      { id: 'overview', label: t('matchDetail.tab.overview') },
+    ]
+    if (hasTimelineEvents) {
+      items.push({ id: 'timeline', label: t('matchDetail.tab.timeline') })
+    }
+    if (itemPaths.size > 0) {
+      items.push({ id: 'items', label: t('matchDetail.tab.items') })
+    }
+    if (skillOrders.size > 0) {
+      items.push({ id: 'skills', label: t('matchDetail.tab.skills') })
+    }
+    if (teamOverview) {
+      items.push({ id: 'teams', label: t('matchDetail.tab.teams') })
+    }
+    return items
+  }, [t, hasTimelineEvents, itemPaths, skillOrders, teamOverview])
+
+  // 数据刷新后当前页签可能已不可用，回退概览而不是渲染空表
+  const activeTab = tabs.some((item) => item.id === tab) ? tab : 'overview'
 
   const renderTeam = (teamId: 100 | 200, participants: Participant[], isRed: boolean) => {
     const team = detail?.teams.find((t) => t.teamId === teamId)
@@ -461,11 +621,61 @@ export function MatchDetailModal({ open, onClose, gameId, focusPuuid }: MatchDet
           {loading && <div className="smd-empty">{t('matchDetail.loading')}</div>}
           {error && <div className="smd-empty smd-error">{error}</div>}
           {!loading && !error && detail && (
-            <div className="smd-teams">
-              <div className="smd-team-divider" aria-hidden="true" />
-              {renderTeam(100, teams.team100, false)}
-              {renderTeam(200, teams.team200, true)}
-            </div>
+            <>
+              {tabs.length > 1 ? (
+                <div className="smd-tab-bar">
+                  {tabs.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`smd-tab${activeTab === item.id ? ' smd-tab--active' : ''}`}
+                      onClick={() => setTab(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  {timelineLoading ? (
+                    <span className="smd-tab-loading">{t('matchDetail.timeline.loading')}</span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {activeTab === 'overview' ? (
+                <div className="smd-teams">
+                  <div className="smd-team-divider" aria-hidden="true" />
+                  {renderTeam(100, teams.team100, false)}
+                  {renderTeam(200, teams.team200, true)}
+                </div>
+              ) : null}
+
+              {activeTab === 'timeline' && timeline ? (
+                <div className="smd-tab-panel">
+                  <MatchTimelineSection
+                    events={timeline.events}
+                    players={players}
+                    source={timeline.source === 'sgp' ? 'sgp' : 'lcu'}
+                  />
+                </div>
+              ) : null}
+
+              {activeTab === 'items' ? (
+                <div className="smd-tab-panel">
+                  <ItemPathSection events={timeline?.events ?? []} players={players} />
+                </div>
+              ) : null}
+
+              {activeTab === 'skills' ? (
+                <div className="smd-tab-panel">
+                  <SkillOrderSection events={timeline?.events ?? []} players={players} />
+                </div>
+              ) : null}
+
+              {activeTab === 'teams' ? (
+                <div className="smd-tab-panel">
+                  <TeamOverviewSection overview={teamOverview} />
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>

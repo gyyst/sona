@@ -43,14 +43,15 @@ import type {
   RewardsGrant,
 } from '@/types/lcu'
 import { SGP_SERVERS, TENCENT_MATCH_HISTORY_INTEROP } from '@/types/sgp'
-import type { SgpEntitlementsToken, SgpGameSummaryLol, SgpMatchHistoryLol, SgpParticipantLol, SgpPerks, SgpTeam } from '@/types/sgp'
+import type { SgpEntitlementsToken, SgpGameDetailsLol, SgpGameSummaryLol, SgpMatchHistoryLol, SgpParticipantLol, SgpPerks, SgpTeam } from '@/types/sgp'
 import { deobfuscateChampSelectPuuid } from '@/lib/champ-select-puuid'
 import { store } from '@/lib/store'
+import { withTimeout } from '@/lib/utils'
 
 // Re-export types for convenience
 export type { SummonerInfo, LobbyConfig, Lobby, GameflowPhase, GameflowSession, LCUEventMessage, ChatConversation, ChatMessage, ChatMe, Availability, SendChatMessageBody, ReadyCheck, ChampSelectSession, ChampSelectPlayerDetail, MatchHistoryResponse, MatchDetail, ChatFriend, SpectatorLaunchPayload, ChampSelectSummoner, RewardsGrant }
 export type { RewardItem, RewardGroup, RewardGrantInfo, RewardSelectionStrategyConfig } from '@/types/lcu'
-export type { SgpEntitlementsToken, SgpMatchHistoryLol } from '@/types/sgp'
+export type { SgpEntitlementsToken, SgpGameDetailsLol, SgpMatchHistoryLol } from '@/types/sgp'
 export { SGP_SERVERS, TENCENT_MATCH_HISTORY_INTEROP, TENCENT_SERVER_NAMES, queueIdToTag } from '@/types/sgp'
 
 export { LcuEventUri, QueueId } from '@/types/lcu'
@@ -275,6 +276,25 @@ function normalizeSgpServerKey(rawCode: string): string {
   const code = rawCode.toUpperCase()
   const mapped = PLATFORM_ID_TO_SGP_KEY[code] ?? code
   return SGP_SERVERS[mapped] ? mapped : ''
+}
+
+/** 只解析到 regional 集群、无法反推 Riot platformId 的 SGP key */
+const REGIONAL_SGP_KEYS = new Set(['EUC1', 'USW2', 'APSE1', 'APNE1'])
+
+/**
+ * SGP_SERVERS key → Riot platformId（matches 的 `match_id` 前缀）
+ *
+ * SGP key 与 platformId 并不总是一致（EUW → EUW1、RU → RU1），
+ * 直接拼接会得到无效 matchId；regional 集群无法反推时返回空，交给上层降级。
+ */
+function sgpServerKeyToPlatformId(sgpServerId: string): string {
+  const key = (sgpServerId ?? '').toUpperCase()
+  if (!key) return ''
+  if (key.startsWith('TENCENT_')) return key.slice('TENCENT_'.length)
+  if (key === 'EUW') return 'EUW1'
+  if (key === 'RU') return 'RU1'
+  if (REGIONAL_SGP_KEYS.has(key)) return ''
+  return SGP_SERVERS[key] ? key : ''
 }
 
 /** 国服 platformId 集合（需要加 TENCENT_ 前缀） */
@@ -1347,6 +1367,104 @@ class LCUManager {
         error: err,
       })
       return this.getNativeMatchHistoryAsSgp(puuid, options)
+    }
+  }
+
+  /**
+   * 解析 SGP DETAILS 所需的 matchId（格式 `{platformId}_{gameId}`）
+   *
+   * 获取顺序：
+   * 1. 当前账号最近 SGP 战绩中匹配 `json.gameId` 的 `metadata.match_id`（最可靠）；
+   * 2. `/lol-chat/v1/me` 的 platformId（或 SGP serverId）拼接；
+   * 3. 都失败返回 null，由调用方回退 LCU timeline。
+   */
+  async resolveSgpMatchId(gameId: number): Promise<string | null> {
+    if (!(gameId > 0)) return null
+
+    try {
+      const summoner = await this.getSummonerInfo()
+      if (summoner?.puuid) {
+        const history = await withTimeout(
+          this.getSgpMatchHistory(summoner.puuid, { startIndex: 0, count: 100 }),
+          10_000,
+          'resolveSgpMatchId(SUMMARY)',
+        )
+        const matched = history.games?.find((game) => game.json?.gameId === gameId)
+        const matchId = matched?.metadata?.match_id
+        if (matchId && /^[A-Za-z0-9]+_\d+$/.test(matchId)) return matchId
+      }
+    } catch (err) {
+      console.warn('[SGP] 解析 matchId 失败，尝试用 platformId 拼接:', err)
+    }
+
+    let platformId = ''
+    try {
+      const me = await this.getChatMe()
+      platformId = me.platformId?.toUpperCase() ?? ''
+    } catch {
+      platformId = ''
+    }
+
+    if (!platformId) {
+      try {
+        const sgpServerId = await this.getSgpServerId()
+        // SGP key 与 Riot platformId 可能不一致（EUW→EUW1、RU→RU1），不能直接拼接
+        platformId = sgpServerKeyToPlatformId(sgpServerId)
+      } catch {
+        platformId = ''
+      }
+    }
+
+    return platformId ? `${platformId}_${gameId}` : null
+  }
+
+  /**
+   * 通过 SGP 查询单局详情（DETAILS）
+   *
+   * DETAILS 是装备购买、技能加点、守卫事件的唯一稳定来源。
+   * 返回 null 表示失败或不支持（旧对局/跨区/字段缺失），调用方应回退 LCU timeline。
+   */
+  async getSgpGameDetails(matchId: string): Promise<SgpGameDetailsLol | null> {
+    if (!matchId) return null
+
+    try {
+      const token = this._entitlementsToken ?? await this.getEntitlementsToken()
+      if (!this._entitlementsToken) this._entitlementsToken = token
+
+      const sgpServerId = await this.getSgpServerId()
+      const server = SGP_SERVERS[sgpServerId.toUpperCase()]
+      if (!server?.matchHistory) {
+        console.warn('[SGP] 找不到服务器配置，无法查询单局详情:', sgpServerId)
+        return null
+      }
+
+      const url = `${server.matchHistory}/match-history-query/v1/products/lol/${encodeURIComponent(matchId)}/DETAILS`
+      const resp = await withTimeout(
+        fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token.accessToken}`,
+            'User-Agent': 'LeagueOfLegendsClient/14.13.596.7996 (rcp-be-lol-match-history)',
+          },
+        }),
+        15_000,
+        `getSgpGameDetails(${matchId})`,
+      )
+
+      if (!resp.ok) {
+        console.warn('[SGP] 单局详情请求失败:', resp.status, resp.statusText, matchId)
+        return null
+      }
+
+      const data = await resp.json() as SgpGameDetailsLol
+      if (!Array.isArray(data?.json?.frames)) {
+        console.warn('[SGP] 单局详情缺少 frames，回退 LCU timeline:', matchId)
+        return null
+      }
+
+      return data
+    } catch (err) {
+      console.warn('[SGP] 单局详情查询异常，回退 LCU timeline:', err)
+      return null
     }
   }
 

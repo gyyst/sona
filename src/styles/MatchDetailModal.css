@@ -48,6 +48,7 @@
   flex: 1;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
 }
 
 .smd-empty {
@@ -739,4 +740,445 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* ==================== 页签 ==================== */
+
+.smd-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 8px 16px 0;
+  background: rgba(30, 35, 40, 0.45);
+  border-bottom: 1px solid #3c2e16;
+}
+
+.smd-tab {
+  padding: 7px 18px 8px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  color: #a09b8c;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.smd-tab:hover {
+  color: #f0e6d2;
+}
+
+.smd-tab--active {
+  color: #c8aa6e;
+  background: rgba(1, 10, 19, 0.62);
+  border-color: #3c2e16;
+  box-shadow: inset 0 2px 0 #c8aa6e;
+}
+
+.smd-tab-loading {
+  margin-left: auto;
+  padding-bottom: 6px;
+  color: #a09b8c;
+  font-size: 11px;
+}
+
+.smd-tab-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+.smd-tab-panel::-webkit-scrollbar { width: 4px; }
+.smd-tab-panel::-webkit-scrollbar-track { background: rgba(1, 10, 19, 0.8); }
+.smd-tab-panel::-webkit-scrollbar-thumb { background: #3c2e16; border-radius: 2px; }
+.smd-tab-panel::-webkit-scrollbar-thumb:hover { background: #c8aa6e; }
+
+.smd-tab-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: #a09b8c;
+  font-size: 13px;
+}
+
+/* ==================== 事件时间轴 ==================== */
+
+.smd-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100%;
+}
+
+.smd-timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.smd-timeline-filters {
+  display: flex;
+  gap: 4px;
+}
+
+.smd-timeline-filter {
+  padding: 4px 12px;
+  border: 1px solid #3c2e16;
+  background: rgba(1, 10, 19, 0.55);
+  color: #a09b8c;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.smd-timeline-filter:hover {
+  color: #f0e6d2;
+  border-color: #c8aa6e;
+}
+
+.smd-timeline-filter--active {
+  color: #c8aa6e;
+  border-color: #c8aa6e;
+  background: rgba(200, 170, 110, 0.12);
+}
+
+.smd-timeline-source {
+  margin-left: auto;
+  color: #a09b8c;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.smd-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.smd-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(30, 35, 40, 0.7);
+  border-left: 3px solid #3c2e16;
+}
+
+.smd-timeline-row--kill { border-left-color: #e84057; }
+.smd-timeline-row--objective { border-left-color: #c8aa6e; }
+.smd-timeline-row--building { border-left-color: #00a1e6; }
+.smd-timeline-row--ward { border-left-color: #9b59b6; }
+.smd-timeline-row--item { border-left-color: #4bb473; }
+.smd-timeline-row--skill { border-left-color: #3498db; }
+
+.smd-timeline-time {
+  width: 48px;
+  flex-shrink: 0;
+  color: #c8aa6e;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.smd-timeline-kind {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid #3c2e16;
+  color: #a09b8c;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.smd-timeline-kind--kill { color: #e84057; border-color: rgba(232, 64, 87, 0.4); }
+.smd-timeline-kind--objective { color: #c8aa6e; border-color: rgba(200, 170, 110, 0.4); }
+.smd-timeline-kind--building { color: #00a1e6; border-color: rgba(0, 161, 230, 0.4); }
+.smd-timeline-kind--ward { color: #9b59b6; border-color: rgba(155, 89, 182, 0.4); }
+.smd-timeline-kind--item { color: #4bb473; border-color: rgba(75, 180, 115, 0.4); }
+.smd-timeline-kind--skill { color: #3498db; border-color: rgba(52, 152, 219, 0.4); }
+
+.smd-timeline-text {
+  flex: 1;
+  min-width: 0;
+  color: #d8d3c6;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smd-timeline-more {
+  align-self: center;
+  margin-top: 6px;
+  padding: 6px 20px;
+  border: 1px solid #3c2e16;
+  background: rgba(1, 10, 19, 0.7);
+  color: #c8aa6e;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.smd-timeline-more:hover {
+  border-color: #c8aa6e;
+  background: rgba(200, 170, 110, 0.12);
+}
+
+/* ==================== 出装 / 技能加点 ==================== */
+
+.smd-path-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.smd-path-players {
+  width: 230px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid #3c2e16;
+}
+
+.smd-path-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-left: 3px solid #0088cc;
+  background: rgba(30, 35, 40, 0.55);
+  color: #a09b8c;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.smd-path-player--red {
+  border-left-color: #e84057;
+}
+
+.smd-path-player:hover {
+  color: #f0e6d2;
+  border-color: rgba(200, 170, 110, 0.28);
+}
+
+.smd-path-player--active {
+  color: #f0e6d2;
+  background: rgba(200, 170, 110, 0.12);
+  border-color: #c8aa6e;
+}
+
+.smd-path-player img {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid #3c2e16;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.smd-path-player-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smd-path-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.smd-path-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  background: rgba(30, 35, 40, 0.7);
+}
+
+.smd-path-action {
+  width: 44px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.smd-path-action--buy { color: #4bb473; }
+.smd-path-action--sell { color: #e84057; }
+.smd-path-action--undo { color: #a09b8c; }
+
+.smd-path-item {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid #3c2e16;
+  background: #010a13;
+}
+
+.smd-path-item img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.smd-path-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #f0e6d2;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smd-path-time {
+  flex-shrink: 0;
+  color: #c8aa6e;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.smd-skill-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.smd-skill-summary {
+  color: #a09b8c;
+  font-size: 12px;
+}
+
+.smd-skill-sequence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smd-skill-cell {
+  width: 42px;
+  height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid #3c2e16;
+  background: #010a13;
+  color: #f0e6d2;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.smd-skill-cell small {
+  color: #a09b8c;
+  font-size: 9px;
+  font-weight: 400;
+  font-family: monospace;
+}
+
+.smd-skill-cell--q { border-color: rgba(0, 161, 230, 0.5); color: #00a1e6; }
+.smd-skill-cell--w { border-color: rgba(75, 180, 115, 0.5); color: #4bb473; }
+.smd-skill-cell--e { border-color: rgba(155, 89, 182, 0.5); color: #9b59b6; }
+.smd-skill-cell--r { border-color: rgba(200, 170, 110, 0.55); color: #c8aa6e; }
+
+/* ==================== 队伍总览 ==================== */
+
+.smd-overview-grid {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.smd-overview-team {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #3c2e16;
+  background: rgba(30, 35, 40, 0.62);
+}
+
+.smd-overview-team--blue { border-top: 3px solid #00a1e6; }
+.smd-overview-team--red { border-top: 3px solid #e84057; }
+
+.smd-overview-team-title {
+  margin-bottom: 8px;
+  color: #f0e6d2;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.smd-overview-team--blue .smd-overview-team-title { color: #00a1e6; }
+.smd-overview-team--red .smd-overview-team-title { color: #e84057; }
+
+.smd-overview-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(60, 46, 22, 0.6);
+  color: #a09b8c;
+  font-size: 13px;
+}
+
+.smd-overview-stat:last-child {
+  border-bottom: none;
+}
+
+.smd-overview-stat strong {
+  color: #f0e6d2;
+  font-size: 15px;
+  font-family: monospace;
+}
+
+.smd-overview-bans {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(60, 46, 22, 0.6);
+}
+
+.smd-overview-bans-label {
+  color: #a09b8c;
+  font-size: 13px;
+}
+
+.smd-overview-bans-icons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.smd-overview-bans-icons img {
+  width: 26px;
+  height: 26px;
+  display: block;
+  border: 1px solid #3c2e16;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+.smd-overview-bans-empty {
+  color: #a09b8c;
+  font-size: 12px;
 }

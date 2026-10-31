@@ -393,6 +393,113 @@ export function queueIdToTag(queueId: number): string {
   return queueId > 0 ? `q_${queueId}` : ''
 }
 
+// ==================== 单局详情（DETAILS） ====================
+
+/**
+ * SGP 单局详情响应（match-history-query/.../DETAILS）
+ *
+ * 字段参考 LeagueAkari，全部按可选处理：旧对局、跨区对局或接口变更时
+ * 可能缺少 frames / events，消费方必须防御式读取。
+ */
+export interface SgpGameDetailsLol {
+  metadata?: Partial<SgpGameMetadataLol>
+  json?: SgpGameDetailsJsonLol
+}
+
+export interface SgpGameDetailsJsonLol {
+  endOfGameResult?: string
+  /** 帧间隔（通常 60000ms）；渲染时应以 frames[].timestamp 为准 */
+  frameInterval?: number
+  frames?: SgpTimelineFrameLol[]
+  gameId?: number
+  participants?: SgpDetailsParticipantLol[]
+}
+
+export interface SgpDetailsParticipantLol {
+  participantId?: number
+  puuid?: string
+  teamId?: number
+}
+
+export interface SgpPositionLol {
+  x?: number
+  y?: number
+}
+
+export interface SgpTimelineFrameLol {
+  timestamp?: number
+  events?: SgpTimelineEventLol[]
+  participantFrames?: Record<string, SgpDetailedParticipantFrameLol>
+}
+
+/** DETAILS 帧内的逐人经济/等级/坐标快照 */
+export interface SgpDetailedParticipantFrameLol {
+  participantId?: number
+  currentGold?: number
+  totalGold?: number
+  goldPerSecond?: number
+  level?: number
+  xp?: number
+  minionsKilled?: number
+  jungleMinionsKilled?: number
+  timeEnemySpentControlled?: number
+  position?: SgpPositionLol
+  championStats?: Record<string, number>
+  damageStats?: Record<string, number>
+}
+
+/** DETAILS 事件类型（保留 string 兜底，避免新版本新增类型时类型报错） */
+export type SgpTimelineEventType =
+  | 'PAUSE_END'
+  | 'LEVEL_UP'
+  | 'SKILL_LEVEL_UP'
+  | 'ITEM_PURCHASED'
+  | 'ITEM_SOLD'
+  | 'ITEM_DESTROYED'
+  | 'ITEM_UNDO'
+  | 'WARD_PLACED'
+  | 'WARD_KILL'
+  | 'CHAMPION_KILL'
+  | 'CHAMPION_SPECIAL_KILL'
+  | 'BUILDING_KILL'
+  | 'ELITE_MONSTER_KILL'
+  | 'DRAGON_SOUL_GIVEN'
+  | 'OBJECTIVE_BOUNTY_PRESTART'
+  | 'GAME_END'
+  | 'TURRET_PLATE_DESTROYED'
+
+export interface SgpTimelineEventLol {
+  type?: SgpTimelineEventType | string
+  timestamp?: number
+  participantId?: number
+  killerId?: number
+  victimId?: number
+  creatorId?: number
+  assistingParticipantIds?: number[]
+  itemId?: number
+  beforeId?: number
+  afterId?: number
+  /** 1-4 对应 Q/W/E/R */
+  skillSlot?: number
+  levelUpType?: string
+  level?: number
+  monsterType?: string
+  monsterSubType?: string
+  buildingType?: string
+  towerType?: string
+  laneType?: string
+  teamId?: number
+  killType?: string
+  wardType?: string
+  bounty?: number
+  shutdownBounty?: number
+  killStreakLength?: number
+  goldGain?: number
+  winningTeam?: number
+  realTimestamp?: number
+  position?: SgpPositionLol
+}
+
 /** 国服大区中文名映射 */
 export const TENCENT_SERVER_NAMES: Record<string, string> = {
   TENCENT_HN1: '艾欧尼亚',
