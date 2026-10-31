@@ -1,0 +1,45 @@
+/* 对局分析玩家行中的标签 pill */
+.spt-tag-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin-top: 1px;
+  overflow: hidden;
+  vertical-align: middle;
+  flex-shrink: 1;
+}
+
+.spt-tag {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.spt-tag--positive {
+  border-color: rgba(91, 189, 114, 0.55);
+  background: rgba(91, 189, 114, 0.12);
+  color: #5bbd72;
+}
+
+.spt-tag--negative {
+  border-color: rgba(232, 64, 87, 0.55);
+  background: rgba(232, 64, 87, 0.12);
+  color: #ff7b8a;
+}
+
+.spt-tag--neutral {
+  border-color: rgba(200, 170, 110, 0.55);
+  background: rgba(200, 170, 110, 0.1);
+  color: #c8aa6e;
+}
+
+.sga-player--red .spt-tag-list {
+  justify-content: flex-end;
+}

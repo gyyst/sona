@@ -224,6 +224,8 @@ export interface SonaConfig {
   playerNotesEnabled: boolean
   /** 玩家备注数据：key 为玩家稳定标识 */
   playerNotes: Record<string, PlayerNote>
+  /** 玩家标签（基于近期战绩的连胜/连败、一筋与位置偏好） */
+  playerTaggingEnabled: boolean
   /** 对局结束后自动返回房间 */
   autoReturnToLobby: boolean
   /** 自动返回模式: queue=自动排队, lobby=仅返回房间 */
@@ -332,6 +334,7 @@ const DEFAULT_CONFIG: SonaConfig = {
   gameAnalysisPopup: false,
   playerNotesEnabled: true,
   playerNotes: {},
+  playerTaggingEnabled: true,
   autoReturnToLobby: false,
   autoReturnMode: 'queue',
   autoTransferOwner: false,

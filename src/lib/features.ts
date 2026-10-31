@@ -31,6 +31,7 @@ import { updateCustomProfileBg } from '@/lib/features/profile-background'
 import { updateCustomBanner } from '@/lib/features/custom-banner'
 import { updateGameAnalysisPopup } from '@/lib/features/game-analysis-popup'
 import { updatePlayerNotes } from '@/lib/features/player-notes'
+import { setChampSelectPlayerTags, updatePlayerTags } from '@/lib/features/player-tags'
 import { initSessionStats } from '@/lib/session-stats'
 import { captureInitialLp } from '@/lib/lp-tracker'
 import { updateAutoReturnToLobby } from '@/lib/features/auto-return-to-lobby'
@@ -56,6 +57,7 @@ import {
   type SonaPlayerStrengthScore,
 } from '@/lib/player-strength-score'
 import { deobfuscateChampSelectPuuid } from '@/lib/champ-select-puuid'
+import { computePlayerTags, type PlayerTag } from '@/lib/player-tags'
 import { translate } from '@/i18n'
 
 // ==================== 共享：查询队友胜率 ====================
@@ -79,6 +81,8 @@ interface TeammateStats {
   avgA: number
   kdaNum: number
   strengthScore: SonaPlayerStrengthScore | null
+  /** 基于本模式近期战绩生成的玩家标签（最多 3 个） */
+  tags?: PlayerTag[]
 }
 
 interface TeamStatsResult {
@@ -103,6 +107,14 @@ function getTeammateStatsKey(stat: TeammateStats): string {
   if (stat.puuid) return `puuid:${stat.puuid}`
   if (stat.summonerId) return `summoner:${stat.summonerId}`
   return `floor:${stat.floor}`
+}
+
+/** 把当前楼层顺序的标签推给玩家标签注入模块（不发起额外请求） */
+function publishPlayerTagData(stats: TeammateStats[]) {
+  setChampSelectPlayerTags(stats.map((stat) => ({
+    key: getTeammateStatsKey(stat),
+    tags: stat.tags ?? [],
+  })))
 }
 
 /**
@@ -253,6 +265,7 @@ async function _doFetchTeamStats(): Promise<TeamStatsResult> {
 
       const total = matchStats.length
       const strengthScore = calculateSonaPlayerStrengthScore(games, puuid)
+      const tags = store.get('playerTaggingEnabled') ? computePlayerTags({ games, puuid }) : undefined
       logger.info(
         '[TeamStats] %s → 当前模式有效 %d 场 / 返回 %d 场 (queueId=%d, tag=%s)',
         gameName,
@@ -278,6 +291,7 @@ async function _doFetchTeamStats(): Promise<TeamStatsResult> {
         avgA: totalAssists / total,
         kdaNum: totalDeaths === 0 ? totalKills + totalAssists : (totalKills + totalAssists) / totalDeaths,
         strengthScore,
+        tags,
       } as TeammateStats
     } catch (error) {
       logger.warn('[TeamStats] %d楼战绩查询失败（visibility=%s）:', i + 1, player.nameVisibilityType || 'unknown', error)
@@ -291,6 +305,7 @@ async function _doFetchTeamStats(): Promise<TeamStatsResult> {
     }
   }))
 
+  publishPlayerTagData(stats)
   return { isBlue, queueId: currentQueueId, stats, fetchCount: FETCH_COUNT }
 }
 
@@ -812,6 +827,7 @@ function onChampSelectUpdate(event: LCUEventMessage) {
   // 清理旧注入并重建
   cleanupInjectedDOM()
   floorStats = buildFloorStatsFromSession(session)
+  publishPlayerTagData(floorStats)
   currentChampSelectTeamSignature = nextSignature
   tryInjectChampSelectTier()
 }
@@ -1269,6 +1285,9 @@ export function initFeatures() {
 
   updatePlayerNotes(store.get('playerNotesEnabled'))
   store.onChange('playerNotesEnabled', updatePlayerNotes)
+
+  updatePlayerTags(store.get('playerTaggingEnabled'))
+  store.onChange('playerTaggingEnabled', updatePlayerTags)
 
   updateAutoReturnToLobby(store.get('autoReturnToLobby'))
   store.onChange('autoReturnToLobby', updateAutoReturnToLobby)

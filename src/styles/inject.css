@@ -265,3 +265,46 @@
   color: #a09b8c;
   flex-shrink: 0;
 }
+
+/* 选人界面玩家标签 pill */
+.sona-player-tag-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 180px;
+  margin-left: 4px;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sona-player-tag {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 14px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.sona-player-tag--positive {
+  border-color: rgba(91, 189, 114, 0.55);
+  background: rgba(91, 189, 114, 0.12);
+  color: #5bbd72;
+}
+
+.sona-player-tag--negative {
+  border-color: rgba(232, 64, 87, 0.55);
+  background: rgba(232, 64, 87, 0.12);
+  color: #ff7b8a;
+}
+
+.sona-player-tag--neutral {
+  border-color: rgba(200, 170, 110, 0.55);
+  background: rgba(200, 170, 110, 0.1);
+  color: #c8aa6e;
+}

@@ -12,6 +12,7 @@ import {
   type PlayerNoteIdentity,
 } from '@/lib/player-notes'
 import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
+import { getChampSelectPlayerNodes } from '@/lib/features/champ-select-player-dom'
 
 // ==================== 选人界面备注徽标注入 ====================
 
@@ -169,11 +170,10 @@ function tryInjectPlayerNoteBadges(): boolean {
   // 不在选人阶段时直接跳过，避免全局注入任务每帧查询 DOM
   if (noteTargets.length === 0) return true
 
-  const wrappers = document.querySelectorAll('.party.visible .summoner-wrapper.visible.left')
-  if (wrappers.length === 0) return true
+  const nodes = getChampSelectPlayerNodes()
+  if (nodes.length === 0) return true
 
-  wrappers.forEach((wrapper, index) => {
-    const anchor = wrapper.querySelector('.player-name-wrapper') as HTMLElement | null
+  nodes.forEach(({ wrapper, nameAnchor: anchor }, index) => {
     const existing = wrapper.querySelector(`[${BADGE_ATTR}]`) as HTMLElement | null
     const target = noteTargets[index]
     const key = target ? getPlayerNoteKey(target) : null

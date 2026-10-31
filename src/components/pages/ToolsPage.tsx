@@ -164,6 +164,7 @@ export function ToolsPage() {
   const [gameAnalysisPopup, setGameAnalysisPopup] = useState(store.get('gameAnalysisPopup'))
   const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
   const [playerNotes, setPlayerNotes] = useState(store.get('playerNotes'))
+  const [playerTaggingEnabled, setPlayerTaggingEnabled] = useState(store.get('playerTaggingEnabled'))
   const [playerNoteSearch, setPlayerNoteSearch] = useState('')
   const [editingPlayerNoteKey, setEditingPlayerNoteKey] = useState<string | null>(null)
   const [autoReturnToLobby, setAutoReturnToLobby] = useState(store.get('autoReturnToLobby'))
@@ -332,6 +333,7 @@ export function ToolsPage() {
       store.onChange('gameAnalysisPopup', setGameAnalysisPopup),
       store.onChange('playerNotesEnabled', setPlayerNotesEnabled),
       store.onChange('playerNotes', setPlayerNotes),
+      store.onChange('playerTaggingEnabled', setPlayerTaggingEnabled),
       store.onChange('autoReturnToLobby', setAutoReturnToLobby),
       store.onChange('autoReturnMode', setAutoReturnMode),
       store.onChange('analyzeTeamPower', setAnalyzeTeamPower),
@@ -1009,6 +1011,15 @@ export function ToolsPage() {
               placeholder={t('tools.autoTransferOwner.riotIdPlaceholder')}
             />
           </div>
+        </SettingCard>
+        <SettingCard
+          title={t('tools.playerTagging.title')}
+          description={t('tools.playerTagging.description')}
+        >
+          <SonaSwitch
+            checked={playerTaggingEnabled}
+            onChange={(v) => { setPlayerTaggingEnabled(v); store.set('playerTaggingEnabled', v) }}
+          />
         </SettingCard>
         <SettingCard
           title={t('playerNotes.title')}

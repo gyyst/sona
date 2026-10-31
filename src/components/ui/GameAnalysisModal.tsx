@@ -9,11 +9,13 @@ import { store } from '@/lib/store'
 import { getChampIcon } from '@/lib/assets'
 import { getRating } from '@/lib/features'
 import { filterSonaStrengthGamesByQueue, shouldSkipSonaStrengthGame } from '@/lib/player-strength-score'
+import { computePlayerTags, formatPlayerTag, type PlayerTag } from '@/lib/player-tags'
 import type { PlayerNote } from '@/lib/player-notes'
 import { withTimeout } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { GameflowTeamPlayer, PlayerChampionSelection } from '@/types/lcu'
 import '@/styles/GameAnalysisModal.css'
+import '@/styles/PlayerTags.css'
 
 // ==================== 类型 ====================
 
@@ -62,6 +64,8 @@ interface PlayerAnalysis {
   recentGames: RecentGame[]
   /** 主播模式标记 */
   isBroadcaster: boolean
+  /** 基于本次查询战绩生成的玩家标签，最多 3 个 */
+  tags?: PlayerTag[]
 }
 
 interface GameInfo {
@@ -150,6 +154,7 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
   const [premadeGroups, setPremadeGroups] = useState<Map<string, string>>(new Map())
   const [playerNotes, setPlayerNotes] = useState<Record<string, PlayerNote>>(() => store.get('playerNotes'))
   const [playerNotesEnabled, setPlayerNotesEnabled] = useState(store.get('playerNotesEnabled'))
+  const [playerTaggingEnabled, setPlayerTaggingEnabled] = useState(store.get('playerTaggingEnabled'))
   const [editingNotePlayer, setEditingNotePlayer] = useState<{ puuid: string; displayName: string } | null>(null)
   const loadTokenRef = useRef(0)
 
@@ -157,9 +162,11 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
   useEffect(() => {
     const unsubNotes = store.onChange('playerNotes', setPlayerNotes)
     const unsubEnabled = store.onChange('playerNotesEnabled', setPlayerNotesEnabled)
+    const unsubTagging = store.onChange('playerTaggingEnabled', setPlayerTaggingEnabled)
     return () => {
       unsubNotes()
       unsubEnabled()
+      unsubTagging()
     }
   }, [])
 
@@ -386,6 +393,10 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
             }
             const winRate = total > 0 ? (wins / total) * 100 : 0
             const kdaNum = totalD === 0 ? totalK + totalA : (totalK + totalA) / totalD
+            // 使用完整一轮 SGP 战绩计算标签，而不是仅近 5 局；开关关闭时不计算
+            const tags = store.get('playerTaggingEnabled')
+              ? computePlayerTags({ games, puuid: p.puuid })
+              : undefined
 
             return {
               ...placeholder,
@@ -401,6 +412,7 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
               rankColor,
               rating: getRating(winRate, kdaNum),
               recentGames,
+              tags,
             }
           } catch {
             return { ...placeholder, summonerName: t('common.unknown') }
@@ -500,6 +512,7 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
                       queueId={gameInfo?.queueId}
                       note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
                       onEditNote={playerNotesEnabled ? handleEditNote : undefined}
+                      showTags={playerTaggingEnabled}
                     />
                   ))}
                 </div>
@@ -524,6 +537,7 @@ export function GameAnalysisModal({ open, onClose, mockData }: GameAnalysisModal
                       queueId={gameInfo?.queueId}
                       note={playerNotesEnabled && p.puuid ? playerNotes[p.puuid] : undefined}
                       onEditNote={playerNotesEnabled ? handleEditNote : undefined}
+                      showTags={playerTaggingEnabled}
                     />
                   ))}
                 </div>
@@ -554,12 +568,13 @@ function renderKdaValue(val: number, isMax: boolean) {
   return isMax ? <span style={{ color: '#ff4444' }}>{text}</span> : text
 }
 
-function PlayerRow({ player, isRed, queueId, note, onEditNote }: {
+function PlayerRow({ player, isRed, queueId, note, onEditNote, showTags }: {
   player: PlayerAnalysis
   isRed: boolean
   queueId?: number
   note?: PlayerNote
   onEditNote?: (player: PlayerAnalysis) => void
+  showTags?: boolean
 }) {
   const { t } = useI18n()
   const winRate = player.winRate
@@ -623,6 +638,15 @@ function PlayerRow({ player, isRed, queueId, note, onEditNote }: {
               </>
             ) : null}
           </div>
+          {showTags && player.tags && player.tags.length > 0 ? (
+            <span className="spt-tag-list">
+              {player.tags.slice(0, 3).map((tag) => (
+                <span key={tag.id} className={`spt-tag spt-tag--${tag.tone}`}>
+                  {formatPlayerTag(tag, t)}
+                </span>
+              ))}
+            </span>
+          ) : null}
           <span className="sga-player-rank" style={{ color: player.rankColor || '#5c5b57' }}>
             {isRed && player.rating ? <span className="sga-player-rating">{player.rating} · </span> : null}
             {player.rankText || t('gameAnalysis.unranked')}
