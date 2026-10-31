@@ -5,13 +5,14 @@ import { Modal } from '@/components/ui/Modal'
 import { Sidebar, type SidebarItem } from '@/components/ui/Sidebar'
 import { HomePage } from '@/components/pages/HomePage'
 import { ToolsPage } from '@/components/pages/ToolsPage'
+import { MatchDashboardPage } from '@/components/pages/MatchDashboardPage'
 import { BeautifyPage } from '@/components/pages/BeautifyPage'
 import { SettingsPage } from '@/components/pages/SettingsPage'
 import { AboutPage } from '@/components/pages/AboutPage'
 import { RewardsPage } from '@/components/pages/RewardsPage'
 import { DebugPage } from '@/components/pages/DebugPage'
 import { UpdatePage } from '@/components/pages/UpdatePage'
-import { HomeIcon, GamepadIcon, PaletteIcon, SettingsIcon, InfoIcon, BugIcon, ZapIcon, GiftIcon } from '@/components/ui/icons'
+import { HomeIcon, GamepadIcon, DashboardIcon, PaletteIcon, SettingsIcon, InfoIcon, BugIcon, ZapIcon, GiftIcon } from '@/components/ui/icons'
 import { onModalVisibilityChange, isModalVisible, closeModal } from '@/lib/modal'
 import { store } from '@/lib/store'
 import { getUpdateState, onUpdateStateChange, type UpdateState } from '@/lib/update-checker'
@@ -21,6 +22,7 @@ import type { TranslationKey } from '@/i18n'
 const baseSidebarItemConfigs: Array<Omit<SidebarItem, 'label'> & { labelKey: TranslationKey }> = [
   { id: 'home', icon: <HomeIcon />, labelKey: 'nav.home' },
   { id: 'tools', icon: <GamepadIcon />, labelKey: 'nav.tools' },
+  { id: 'dashboard', icon: <DashboardIcon />, labelKey: 'nav.dashboard' },
   { id: 'rewards', icon: <GiftIcon />, labelKey: 'nav.rewards' },
   { id: 'beautify', icon: <PaletteIcon />, labelKey: 'nav.beautify' },
   { id: 'settings', icon: <SettingsIcon />, labelKey: 'nav.settings' },
@@ -43,6 +45,8 @@ function PageContent({ pageId }: { pageId: string }) {
       return <HomePage />
     case 'tools':
       return <ToolsPage />
+    case 'dashboard':
+      return <MatchDashboardPage />
     case 'rewards':
       return <RewardsPage />
     case 'beautify':

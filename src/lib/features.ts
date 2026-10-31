@@ -31,6 +31,8 @@ import { updateCustomProfileBg } from '@/lib/features/profile-background'
 import { updateCustomBanner } from '@/lib/features/custom-banner'
 import { updateGameAnalysisPopup } from '@/lib/features/game-analysis-popup'
 import { updatePlayerNotes } from '@/lib/features/player-notes'
+import { initSessionStats } from '@/lib/session-stats'
+import { captureInitialLp } from '@/lib/lp-tracker'
 import { updateAutoReturnToLobby } from '@/lib/features/auto-return-to-lobby'
 import { updateAutoTransferOwner, refreshAutoTransferOwner } from '@/lib/features/auto-transfer-party-owner'
 import { updateOpggBuildRecommendation } from '@/lib/features/opgg-build-recommendation'
@@ -1105,6 +1107,10 @@ function pickRandomHomepageBackgroundOnStartup() {
 
 export function initFeatures() {
   preloadChampSelectTierBadgeData()
+
+  // 对局数据看板：会话统计从客户端启动开始记录，LP 在启动时保存快照
+  initSessionStats()
+  void captureInitialLp()
 
   updateAutoAccept(store.get('autoAcceptMatch'))
   store.onChange('autoAcceptMatch', updateAutoAccept)

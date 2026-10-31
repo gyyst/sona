@@ -117,10 +117,31 @@ let initialized = false
 
 /** 当前登录账号的 puuid，在插件 load 时获取一次，整个生命周期内不会变化 */
 let currentPuuid = ''
+/** 启动时尚未登录导致缓存为空时，后续查询到的 puuid 缓存 */
+let fallbackPuuid = ''
 
 /** 获取当前账号的 puuid（插件加载时初始化，之后不变） */
 export function getPuuid(): string {
   return currentPuuid
+}
+
+/**
+ * 异步解析当前账号 puuid。
+ * 优先使用 initAssets 缓存；启动时尚未登录导致缓存为空时，再查询一次并缓存结果。
+ */
+export async function resolveCurrentPuuid(): Promise<string> {
+  if (currentPuuid) return currentPuuid
+  if (fallbackPuuid) return fallbackPuuid
+
+  try {
+    const summoner = await lcu.getSummonerInfo()
+    fallbackPuuid = summoner.puuid || ''
+  } catch (err) {
+    fallbackPuuid = ''
+    logger.warn('[Assets] 获取当前账号 puuid 失败:', err)
+  }
+
+  return fallbackPuuid
 }
 
 // ==================== 初始化 ====================
@@ -133,12 +154,9 @@ export async function initAssets() {
   if (initialized) return
 
   // 最先获取当前账号 puuid（签名等功能的账号隔离依赖此值）
-  try {
-    const summoner = await lcu.getSummonerInfo()
-    currentPuuid = summoner.puuid || ''
+  currentPuuid = await resolveCurrentPuuid()
+  if (currentPuuid) {
     logger.info('[Assets] 当前账号 puuid=%s', currentPuuid)
-  } catch (err) {
-    logger.warn('[Assets] 获取 puuid 失败:', err)
   }
 
   // 加载本地英雄平衡数据（构建期嵌入，无网络请求）

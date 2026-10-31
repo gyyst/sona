@@ -101,6 +101,10 @@ export interface SonaConfig {
   champSelectAssistFetchCount: number
   /** 全局战力分析查询局数（20/50/100），默认50 */
   gameAnalysisFetchCount: number
+  /** 对局数据看板：队列过滤 ID（0 = 全部模式） */
+  dashboardQueueId: number
+  /** 对局数据看板：查询场次范围（20/50/100），默认50 */
+  dashboardFetchCount: number
   /** 选人阶段红蓝方提示（进入英雄选择时在聊天框提示当前阵营） */
   sideIndicator: boolean
   /** 红蓝方提示消息类型: chat=队友可见, celebration=仅自己可见 */
@@ -267,6 +271,8 @@ const DEFAULT_CONFIG: SonaConfig = {
   analyzeTeamPowerFetchCount: 50,
   champSelectAssistFetchCount: 50,
   gameAnalysisFetchCount: 50,
+  dashboardQueueId: 0,
+  dashboardFetchCount: 50,
   sideIndicator: false,
   sideIndicatorMsgType: 'celebration',
   globalParticle: false,
