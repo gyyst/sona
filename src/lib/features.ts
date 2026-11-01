@@ -24,6 +24,7 @@ import { updateFriendSmartGroup } from '@/lib/features/friend-smart-group'
 import { updateEnhancedFriendGameStatus } from '@/lib/features/enhanced-friend-game-status'
 import { updateLobbyMemberMatchHistory } from '@/lib/features/lobby-member-match-history'
 import { updateAutoHonor } from '@/lib/features/auto-honor'
+import { updateAutoReportPlayers } from '@/lib/features/auto-report'
 import { updateAutoLockChampion } from '@/lib/features/auto-lock-champion'
 import { updateAutoBanChampion } from '@/lib/features/auto-ban-champion'
 import { applyRankDisguise, updateRankDisguise } from '@/lib/features/rank-disguise'
@@ -1258,6 +1259,9 @@ export function initFeatures() {
 
   updateAutoHonor(store.get('autoHonor'))
   store.onChange('autoHonor', updateAutoHonor)
+
+  updateAutoReportPlayers(store.get('autoReportPlayers'))
+  store.onChange('autoReportPlayers', updateAutoReportPlayers)
 
   // 段位伪装：启动时自动应用，配置变化时重新应用
   updateRankDisguise(store.get('rankDisguise'))

@@ -193,6 +193,7 @@ export function ToolsPage() {
   const [rankTier, setRankTier] = useState(store.get('rankTier'))
   const [rankDivision, setRankDivision] = useState(store.get('rankDivision'))
   const [autoHonor, setAutoHonor] = useState(store.get('autoHonor'))
+  const [autoReportPlayers, setAutoReportPlayers] = useState(store.get('autoReportPlayers'))
   const [autoLockChampion, setAutoLockChampion] = useState(store.get('autoLockChampion'))
   const [autoLockChampionIds, setAutoLockChampionIds] = useState(store.get('autoLockChampionIds'))
   const [champSearchText, setChampSearchText] = useState('')
@@ -352,6 +353,7 @@ export function ToolsPage() {
       store.onChange('customProfileBg', setCustomProfileBg),
       store.onChange('customBanner', setCustomBanner),
       store.onChange('autoHonor', setAutoHonor),
+      store.onChange('autoReportPlayers', setAutoReportPlayers),
       store.onChange('autoLockChampion', setAutoLockChampion),
       store.onChange('autoLockChampionIds', setAutoLockChampionIds),
       store.onChange('autoBanChampion', setAutoBanChampion),
@@ -769,6 +771,15 @@ export function ToolsPage() {
           <SonaSwitch
             checked={autoHonor}
             onChange={(v) => { setAutoHonor(v); store.set('autoHonor', v) }}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.autoReport.title')}
+          description={t('tools.autoReport.description')}
+        >
+          <SonaSwitch
+            checked={autoReportPlayers}
+            onChange={(v) => { setAutoReportPlayers(v); store.set('autoReportPlayers', v) }}
           />
         </SettingCard>
         <SettingCard

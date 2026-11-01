@@ -18,6 +18,8 @@ import type {
   ReadyCheck,
   GameflowPhase,
   GameflowSession,
+  EndOfGameStats,
+  PlayerReportPayload,
   ChampSelectSession,
   ChampSelectPlayerDetail,
   ChatConversation,
@@ -804,6 +806,24 @@ class LCUManager {
   /** 再来一局（对局结束后返回房间并自动排队） */
   playAgain(): Promise<unknown> {
     return post('/lol-lobby/v2/play-again')
+  }
+
+  // ==================== 赛后数据与举报 ====================
+
+  /** 获取赛后结算统计（TFT 等无该数据的模式会失败，调用方需自行兜底） */
+  getEogStatsBlock(): Promise<EndOfGameStats> {
+    return get<EndOfGameStats>('/lol-end-of-game/v1/eog-stats-block')
+  }
+
+  /** 获取本局已举报玩家列表，元素可能是 puuid 或 summonerId 的字符串形式 */
+  async getReportedPlayers(gameId: number): Promise<string[]> {
+    const result = await get<string[] | null>(`/lol-player-report-sender/v1/reported-players/gameId/${gameId}`)
+    return Array.isArray(result) ? result.map(String) : []
+  }
+
+  /** 提交赛后举报 */
+  reportPlayer(payload: PlayerReportPayload): Promise<void> {
+    return post<void>('/lol-player-report-sender/v1/end-of-game-reports', payload)
   }
 
   // ==================== 英雄选择 ====================

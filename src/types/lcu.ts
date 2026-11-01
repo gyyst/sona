@@ -493,6 +493,83 @@ export interface PlayerChampionSelection {
   spell2Id: number
 }
 
+// ==================== 赛后结算与举报相关 ====================
+
+/** 赛后结算统计 — GET /lol-end-of-game/v1/eog-stats-block */
+export interface EndOfGameStats {
+  gameId: number
+  /** 举报应优先使用的对局 ID */
+  reportGameId?: number
+  gameLength: number
+  queueType: string
+  gameMode: string
+  gameType: string
+  teams: EndOfGameTeam[]
+}
+
+/** 赛后结算中的队伍 */
+export interface EndOfGameTeam {
+  teamId: number
+  isPlayerTeam: boolean
+  players: EndOfGamePlayer[]
+}
+
+/** 赛后结算中的玩家 */
+export interface EndOfGamePlayer {
+  puuid: string
+  summonerId: number
+  gameId: number
+  teamId: number
+  botPlayer: boolean
+  isLocalPlayer: boolean
+  wasAfk: boolean
+  leaver: boolean
+  severeTransgressor: boolean
+  leaves: number
+  level: number
+  championId: number
+  championName: string
+  riotIdGameName?: string
+  riotIdTagLine?: string
+  selectedPosition?: string
+  detectedTeamPosition?: string
+  stats: EndOfGamePlayerStats
+}
+
+/** LCDS 风格的赛后统计，仅声明本功能用到的字段 */
+export interface EndOfGamePlayerStats {
+  CHAMPIONS_KILLED?: number
+  NUM_DEATHS?: number
+  ASSISTS?: number
+  MINIONS_KILLED?: number
+  NEUTRAL_MINIONS_KILLED?: number
+  GOLD_EARNED?: number
+  LEVEL?: number
+  TOTAL_DAMAGE_DEALT_TO_CHAMPIONS?: number
+  TOTAL_TIME_SPENT_DEAD?: number
+  VISION_SCORE?: number
+  [key: string]: number | undefined
+}
+
+/** 赛后举报可用类别 */
+export type ReportCategory =
+  | 'LEAVING_AFK'
+  | 'ASSISTING_ENEMY_TEAM'
+  | 'THIRD_PARTY_TOOLS'
+  | 'RANK_MANIPULATION'
+  | 'BOTTING'
+  | 'VERBAL_ABUSE'
+  | 'INAPPROPRIATE_NAME'
+
+/** 举报请求体 — LolPlayerReportSenderPlayerReport */
+export interface PlayerReportPayload {
+  offenderPuuid: string
+  obfuscatedOffenderPuuid: string
+  categories: ReportCategory[]
+  gameId: number
+  comment: string
+}
+
 // ==================== 英雄选择相关 ====================
 
 /** 英雄选择会话 — GET /lol-champ-select/v1/session */

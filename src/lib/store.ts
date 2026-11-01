@@ -194,6 +194,8 @@ export interface SonaConfig {
   hideEsportsPopup: boolean
   /** 对局结束自动点赞 */
   autoHonor: boolean
+  /** 对局结束自动举报异常玩家 */
+  autoReportPlayers: boolean
   /** 段位伪装开关 */
   rankDisguise: boolean
   /** 伪装队列 */
@@ -319,6 +321,7 @@ const DEFAULT_CONFIG: SonaConfig = {
   customBanner: false,
   customBannerSelection: null,
   autoHonor: false,
+  autoReportPlayers: false,
   rankDisguise: false,
   rankQueue: 'RANKED_SOLO_5x5',
   rankTier: 'CHALLENGER',
