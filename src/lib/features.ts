@@ -56,6 +56,7 @@ import {
   getTeamPowerTitleKey,
   shouldSkipSonaStrengthGame,
   type SonaPlayerStrengthScore,
+  type SonaTeamPowerTitleKey,
 } from '@/lib/player-strength-score'
 import { deobfuscateChampSelectPuuid } from '@/lib/champ-select-puuid'
 import { computePlayerTags, type PlayerTag } from '@/lib/player-tags'
@@ -917,18 +918,51 @@ export function getRating(winRate: number, kda: number): string {
 /** 客户端聊天消息的保守长度上限；详细模式超出时退回简洁输出。 */
 const CHAMP_SELECT_CHAT_MAX_LENGTH = 512
 
+/** 队内排名对应的称号，从第 1 名到第 5 名及以后依次降低。 */
+const TEAM_POWER_TITLE_KEYS: SonaTeamPowerTitleKey[] = [
+  'strength.teamTier.ace',
+  'strength.teamTier.high',
+  'strength.teamTier.mid',
+  'strength.teamTier.low',
+  'strength.teamTier.burden',
+]
+
+function getResolvedTitleKey(score: SonaPlayerStrengthScore): SonaTeamPowerTitleKey {
+  return score.titleKey ?? getTeamPowerTitleKey(score.score, score.confidence, score.validGames)
+}
+
 /**
- * 称号按绝对分数档位分配，不再按队内排名强制分档。
- * 样本不足/置信度低时由 getTeamPowerTitleKey 返回「数据不足」。
+ * 称号按队内综合评分排名分配，保证同一队里称号各不相同：
+ * 第 1 名千里马、第 2 名上等马……第 5 名及以后纯牛马。
+ *
+ * 样本不足（「数据不足」）的玩家不参与排名，仍显示数据不足；
+ * 全队只有一名玩家可排名时无法体现相对差距，退回绝对分数档位。
  */
 function assignTeamPowerTitles(stats: TeammateStats[]): Map<string, string> {
   const titles = new Map<string, string>()
+  const rankable = stats
+    .filter((stat): stat is TeammateStats & { strengthScore: SonaPlayerStrengthScore } => {
+      const score = stat.strengthScore
+      if (!score) return false
+      return getResolvedTitleKey(score) !== 'strength.teamTier.insufficient'
+    })
+    .sort((a, b) => b.strengthScore.score - a.strengthScore.score || a.floor - b.floor)
+
+  const rankByKey = new Map<string, number>()
+  if (rankable.length >= 2) {
+    rankable.forEach((stat, index) => rankByKey.set(getTeammateStatsKey(stat), index))
+  }
 
   for (const stat of stats) {
     const score = stat.strengthScore
     if (!score) continue
-    const titleKey = score.titleKey ?? getTeamPowerTitleKey(score.score, score.confidence, score.validGames)
-    titles.set(getTeammateStatsKey(stat), translate(titleKey))
+    const key = getTeammateStatsKey(stat)
+    const rank = rankByKey.get(key)
+    if (rank == null) {
+      titles.set(key, translate(getResolvedTitleKey(score)))
+      continue
+    }
+    titles.set(key, translate(TEAM_POWER_TITLE_KEYS[Math.min(rank, TEAM_POWER_TITLE_KEYS.length - 1)]))
   }
 
   return titles
@@ -941,7 +975,7 @@ function formatTeamPowerDetail(score: SonaPlayerStrengthScore): string {
   })
   const strengths = (score.strengths ?? []).map(getSonaStrengthDimensionLabel).join('/')
 
-  if (score.titleKey === 'strength.teamTier.insufficient' || !strengths) {
+  if (getResolvedTitleKey(score) === 'strength.teamTier.insufficient' || !strengths) {
     return translate('champSelect.teamAnalysis.detailSample', { sample })
   }
 
