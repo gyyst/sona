@@ -1,9 +1,38 @@
 name: Release
 
+# 三种触发方式：
+# 1. 推送 v* tag（手动兜底发布）
+# 2. 由 publish.yml / update-balance.yml 通过 workflow_call 调用
+#    注意：GITHUB_TOKEN 推送的 tag 不会触发 push 事件，因此内部发布必须走 workflow_call。
+# 3. 手动指定 tag（用于重建失败的发布或补发历史 tag）
+#    注意：tag 对应提交中的 package.json 版本必须与 tag 一致。
+
 on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: '要发布的 tag，例如 v2026.11.24.1'
+        required: true
+        type: string
+      notes:
+        description: '发布说明；留空则从 CHANGELOG.md 提取'
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布或重新发布的 tag，例如 v2026.11.24.1'
+        required: true
+        type: string
+      notes:
+        description: '发布说明；留空则从 CHANGELOG.md 提取'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -12,14 +41,30 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
 
+    env:
+      # workflow_call 时 github.ref_name 是调用方分支名，必须优先使用传入的 tag
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Verify version matches tag
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${RELEASE_TAG#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json 版本（${PKG_VERSION}）与 tag（${RELEASE_TAG}）不一致，请先用 scripts/update-version.mjs 同步"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -58,35 +103,38 @@ jobs:
           EOF
           # 打包
           cd release
-          zip -r ../sona-${{ github.ref_name }}.zip sona/
+          zip -r "../sona-${RELEASE_TAG}.zip" sona/
 
-      - name: Generate release notes
+      - name: Resolve release notes
         id: notes
+        env:
+          PROVIDED_NOTES: ${{ inputs.notes }}
         run: |
-          TAG=${{ github.ref_name }}
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          # 尝试从 CHANGELOG.md 提取当前版本的内容
-          if [ -f CHANGELOG.md ]; then
-            # 提取两个版本标题之间的内容
-            NOTES=$(sed -n "/^## \[${TAG#v}\]/,/^## \[/{ /^## \[${TAG#v}\]/d; /^## \[/d; p; }" CHANGELOG.md)
-            if [ -z "$NOTES" ]; then
-              # 如果没有匹配到，提取第一个版本块
-              NOTES=$(sed -n '/^## \[/,/^## \[/{//!p;}' CHANGELOG.md | head -50)
-            fi
+          set -euo pipefail
+          NOTES=""
+          if [ -n "$PROVIDED_NOTES" ]; then
+            NOTES="$PROVIDED_NOTES"
+          elif [ -f CHANGELOG.md ]; then
+            # 提取当前版本标题到下一个版本标题之间的内容
+            TAG_VERSION="${RELEASE_TAG#v}"
+            ESCAPED_VERSION=${TAG_VERSION//./\\.}
+            NOTES=$(sed -n "/^## \[${ESCAPED_VERSION}\]/,/^## \[/{ /^## \[${ESCAPED_VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md || true)
           fi
-          if [ -z "$NOTES" ]; then
-            NOTES="Release ${TAG}"
+          if [ -z "${NOTES//[[:space:]]/}" ]; then
+            NOTES="Release ${RELEASE_TAG}"
           fi
-          # 写入多行输出
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "notes<<EOF_RELEASE_NOTES"
+            printf '%s\n' "$NOTES"
+            echo "EOF_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Sona ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Sona ${{ env.RELEASE_TAG }}
           body: ${{ steps.notes.outputs.notes }}
-          files: sona-${{ github.ref_name }}.zip
+          files: sona-${{ env.RELEASE_TAG }}.zip
           draft: false
           prerelease: false

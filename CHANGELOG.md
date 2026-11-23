@@ -2,7 +2,7 @@
 
 所有重要的版本变更都会记录在此文件中。
 
-格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号采用 `年.月.日.序号` 格式（如 `2026.11.24.1`），详见 [发布流程](docs/release.md)。
 
 ---
 

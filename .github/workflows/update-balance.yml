@@ -9,16 +9,29 @@ on:
 permissions:
   contents: write
 
+# 与 publish.yml 共用同一分组，保证发布相关操作串行执行
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+
 jobs:
   check-and-update:
     runs-on: ubuntu-latest
+    outputs:
+      updated: ${{ steps.update.outputs.exit_code == '0' }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -41,59 +54,30 @@ jobs:
           echo "✓ 数据无变化，结束流程"
           exit 0
 
-      - name: Bump patch version
+      - name: Compute next version
         if: steps.update.outputs.exit_code == '0'
         id: version
         run: |
-          # 读取旧版本号
-          OLD_VERSION=$(node -p "require('./package.json').version")
-          echo "旧版本: $OLD_VERSION"
+          set -euo pipefail
+          VERSION=$(node scripts/next-version.mjs)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "新版本：v${VERSION}"
 
-          # 拆分并 +1 到 patch 段
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$OLD_VERSION"
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-          echo "新版本: $NEW_VERSION"
-
-          # 写回 package.json
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
-            pkg.version = '$NEW_VERSION';
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Update CHANGELOG
+      - name: Update version and CHANGELOG
         if: steps.update.outputs.exit_code == '0'
         run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          TODAY=$(date -u +"%Y-%m-%d")
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          node scripts/update-version.mjs "$VERSION"
 
-          # 读取 meta 中的更新时间戳
-          UPDATED_AT=$(node -p "require('./src/data/champion-balance.json')._meta.updatedAt")
           COUNT=$(node -p "require('./src/data/champion-balance.json')._meta.championCount")
+          cat > /tmp/balance-notes.md <<EOF
+          - **英雄平衡数据更新** — 从 Fandom LoL Wiki 同步最新模式平衡数值（共 ${COUNT} 个英雄，覆盖 ARAM / URF / 克隆 / 极限闪击 / 斗魂竞技场 / 终极魔咒书）
+          EOF
 
-          # 构造新版本块
-          NEW_BLOCK="## [$NEW_VERSION] - $TODAY\n\n### 🔄 自动更新\n\n- **英雄平衡数据更新** — 从 Fandom LoL Wiki 同步最新模式平衡数值（共 $COUNT 个英雄，覆盖 ARAM / URF / 克隆 / 极限闪击 / 斗魂竞技场 / 终极魔咒书）\n\n---\n"
-
-          # 插入到 CHANGELOG.md 第一个 "## [" 之前
-          if [ -f CHANGELOG.md ]; then
-            # 找到第一个版本块的行号
-            FIRST_VERSION_LINE=$(grep -n "^## \[" CHANGELOG.md | head -1 | cut -d: -f1)
-            if [ -n "$FIRST_VERSION_LINE" ]; then
-              HEAD_LINES=$((FIRST_VERSION_LINE - 1))
-              head -n $HEAD_LINES CHANGELOG.md > CHANGELOG.tmp
-              echo -e "$NEW_BLOCK" >> CHANGELOG.tmp
-              tail -n +$FIRST_VERSION_LINE CHANGELOG.md >> CHANGELOG.tmp
-              mv CHANGELOG.tmp CHANGELOG.md
-            else
-              echo -e "$NEW_BLOCK\n$(cat CHANGELOG.md)" > CHANGELOG.md
-            fi
-          else
-            echo -e "# Changelog\n\n$NEW_BLOCK" > CHANGELOG.md
-          fi
+          DATE_DISPLAY=$(echo "$VERSION" | awk -F. '{printf "%s-%s-%s", $1, $2, $3}')
+          node scripts/prepend-changelog.mjs "$VERSION" "$DATE_DISPLAY" /tmp/balance-notes.md "🔄 自动更新"
 
       - name: Configure git
         if: steps.update.outputs.exit_code == '0'
@@ -104,10 +88,20 @@ jobs:
       - name: Commit, tag and push
         if: steps.update.outputs.exit_code == '0'
         run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          git add src/data/champion-balance.json package.json CHANGELOG.md
-          git commit -m "chore: 自动更新英雄平衡数据 (v$NEW_VERSION)"
-          git tag "v$NEW_VERSION"
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          git add src/data/champion-balance.json package.json package-lock.json CHANGELOG.md
+          git commit -m "chore: 自动更新英雄平衡数据 (${TAG})"
+          git tag "$TAG"
           git push origin HEAD:main
-          git push origin "v$NEW_VERSION"
-          echo "✓ 已推送 v$NEW_VERSION，release.yml 将自动触发打包发布"
+          git push origin "$TAG"
+          echo "✓ 已推送 ${TAG}，将由 release job 构建发布"
+
+  release:
+    needs: check-and-update
+    if: needs.check-and-update.outputs.updated == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.check-and-update.outputs.tag }}

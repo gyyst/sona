@@ -317,7 +317,7 @@
 <img src="markdown/pengu1.png" alt="Pengu Loader" width="70%">
 </p>
 
-2. 从本项目的 [Releases](https://github.com/WJZ-P/sona/releases) 下载最新的 `sona-vX.Y.Z.zip`（**不要下载项目源码使用**），解压得到 `sona` 文件夹。文件夹里应该有 `index.js`、`index.css` 和 `assets` 文件夹。
+2. 从本项目的 [Releases](https://github.com/WJZ-P/sona/releases) 下载最新的 `sona-v2026.11.24.1.zip` 这样的安装包（版本号格式为 `v年.月.日.序号`，**不要下载项目源码使用**），解压得到 `sona` 文件夹。文件夹里应该有 `index.js`、`index.css` 和 `assets` 文件夹。
 
 3. 在 Pengu Loader 中点击上方的 Plugins，再点右下角「打开插件目录」，把 `sona` 文件夹整个拖进去（Loader 不支持直接拖入文件）。
 
@@ -450,11 +450,19 @@ sona/
 │   │   └── ui/                        # 通用组件与弹窗（战绩、整局详情、对局分析、配装推荐、生涯背景、旗帜……）
 │   └── styles/                        # 页面与组件样式
 ├── scripts/
+│   ├── build.sh                       # 本地构建插件产物
+│   ├── publish.sh                     # 本地一键触发发布工作流
+│   ├── next-version.mjs               # 计算下一个版本号（年.月.日.序号）
+│   ├── update-version.mjs             # 同步 package.json / package-lock.json 的版本号
+│   ├── prepend-changelog.mjs          # 向 CHANGELOG.md 插入新版本块
 │   └── update-champion-balance.ts     # 从 Fandom LoL Wiki 抓取模式平衡数据
 ├── .github/
 │   └── workflows/
-│       ├── release.yml                # 推 v* tag 自动构建并发布 Release
-│       └── update-balance.yml         # 每周定时同步平衡数据并自动发布补丁版本
+│       ├── publish.yml                # 一键发布：计算版本 → 提交 → 打 tag → 构建发布
+│       ├── release.yml                # 构建并发布 Release（tag 触发 / 被其他工作流调用）
+│       └── update-balance.yml         # 每周定时同步平衡数据并自动发布新版本
+├── docs/                              # 项目文档
+│   └── release.md                     # 发布流程与版本号规则
 ├── assets/                            # 静态资源（Sona 头像）
 ├── markdown/                          # README 配图
 ├── CHANGELOG.md                       # 版本变更日志

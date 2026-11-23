@@ -274,7 +274,7 @@ Sona focuses on practical quality-of-life improvements: champion select tools, m
 ### Steps
 
 1. Install Pengu Loader from the [Pengu Loader releases](https://github.com/PenguLoader/PenguLoader), start it, and make sure it shows `ready`.
-2. Download the latest `sona-vX.Y.Z.zip` from this repository's [Releases](https://github.com/WJZ-P/sona/releases) page. Do not use the source-code archive as a plugin package.
+2. Download the latest `sona-v2026.11.24.1.zip` package from this repository's [Releases](https://github.com/WJZ-P/sona/releases) page (the version format is `v<year>.<month>.<day>.<serial>`). Do not use the source-code archive as a plugin package.
 3. In Pengu Loader, open the Plugins tab and click "Open plugins folder".
 4. Extract the `sona` folder into the plugins folder. It should contain `index.js`, `index.css`, and an `assets` folder.
 5. Click "Refresh" in Pengu Loader, make sure `sona` is checked, and restart the League client.
@@ -392,11 +392,19 @@ sona/
 │   │   └── ui/                        # Shared components and modals
 │   └── styles/                        # Page and component styles
 ├── scripts/
+│   ├── build.sh                       # Local plugin build
+│   ├── publish.sh                     # One-click release trigger from the CLI
+│   ├── next-version.mjs               # Computes the next version (year.month.day.serial)
+│   ├── update-version.mjs             # Syncs the version in package.json / package-lock.json
+│   ├── prepend-changelog.mjs          # Prepends a new version block to CHANGELOG.md
 │   └── update-champion-balance.ts     # Scrapes mode balance data from the Fandom LoL Wiki
 ├── .github/
 │   └── workflows/
-│       ├── release.yml                # Build and publish a Release on v* tags
-│       └── update-balance.yml         # Weekly balance sync with automatic patch releases
+│       ├── publish.yml                # One-click release: version → commit → tag → build & publish
+│       ├── release.yml                # Builds and publishes a Release (tag-triggered / reusable)
+│       └── update-balance.yml         # Weekly balance sync with automatic releases
+├── docs/                              # Project documentation
+│   └── release.md                     # Release process and versioning rules
 ├── assets/                            # Static assets (Sona icon)
 ├── markdown/                          # README images
 ├── CHANGELOG.md
