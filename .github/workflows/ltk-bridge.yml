@@ -3,7 +3,9 @@ name: LTK Bridge
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'feat/**'
     paths:
       - 'ltk-bridge/**'
       - '.github/workflows/ltk-bridge.yml'
