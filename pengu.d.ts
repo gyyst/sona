@@ -61,12 +61,21 @@ declare global {
     getScriptPath(): string
     /** Sona plugin runtime state */
     __SONA_RUNTIME__?: SonaRuntime
+    /** Sona 冻结引导器写入的本次运行信息 */
+    __SONA_BOOTSTRAP__?: SonaBootstrapInfo
+    /**
+     * Sona 插件目录的显式基址（以 / 结尾）。
+     * 缓存/远程加载应用包时 import.meta.url 不再指向插件目录，资源解析必须依赖它。
+     */
+    __SONA_PLUGIN_BASE_URL__?: string
   }
 
   /** Pengu Loader namespace */
   const Pengu: {
     /** Current Pengu Loader version */
     version: string
+    /** Pengu 设置中的“自动检查插件更新”；false 时插件不得发起自动更新请求 */
+    autoUpdateCheck?: boolean
   }
 
   /** Toast notification API @since v1.1.0 */
@@ -106,6 +115,50 @@ declare global {
     clear(): void
     /** 设置主题 */
     setTheme(theme: 'light' | 'dark'): void
+  }
+
+  /** DataStore 中的待更新指针（键：sona:updatePointer） */
+  interface SonaUpdatePointer {
+    /** 目标版本，如 1.13.1 */
+    version: string
+    /** Release tag，如 v1.13.1 */
+    tag: string
+    /** app.js 的 HTTPS 下载地址 */
+    appUrl: string
+    /** app.css 的 HTTPS 下载地址 */
+    cssUrl: string
+    /** app.js 的 SHA-256（64 位小写十六进制） */
+    appSha256: string
+    /** app.css 的 SHA-256（64 位小写十六进制） */
+    cssSha256: string
+    /** 写入时间戳 */
+    savedAt: number
+  }
+
+  /** IndexedDB（sona-updates/bundles）中的缓存应用包 */
+  interface SonaCachedBundle {
+    /** 固定为 pending */
+    id: string
+    version: string
+    /** app.js 全文 */
+    appSource: string
+    /** app.css 全文 */
+    cssSource: string
+    savedAt: number
+  }
+
+  /** 冻结引导器写入 window.__SONA_BOOTSTRAP__ 的本次运行信息 */
+  interface SonaBootstrapInfo {
+    /** 运行来源：本地 app.js / IndexedDB 缓存 / 远程 CDN */
+    source: 'local' | 'cache' | 'remote'
+    /** 实际运行的版本 */
+    runningVersion: string
+    /** 本地 version.json 中的版本（读取失败时为 0.0.0） */
+    localVersion: string
+    /** 本次尝试加载的待更新版本 */
+    attemptedVersion?: string
+    /** 缓存/远程加载失败并回退本地时的原因 */
+    error?: string
   }
 
   type SonaRuntime = {

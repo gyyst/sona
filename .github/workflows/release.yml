@@ -1,9 +1,38 @@
 name: Release
 
+# 三种触发方式：
+# 1. 推送 v* tag（手动兜底发布）
+# 2. 由 publish.yml / update-balance.yml 通过 workflow_call 调用
+#    注意：GITHUB_TOKEN 推送的 tag 不会触发 push 事件，因此内部发布必须走 workflow_call。
+# 3. 手动指定 tag（用于重建失败的发布或补发历史 tag）
+#    注意：tag 对应提交中的 package.json 版本必须与 tag 一致。
+
 on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: '要发布的 tag，例如 v2026.11.24.1'
+        required: true
+        type: string
+      notes:
+        description: '发布说明；留空则从 CHANGELOG.md 提取'
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布或重新发布的 tag，例如 v2026.11.24.1'
+        required: true
+        type: string
+      notes:
+        description: '发布说明；留空则从 CHANGELOG.md 提取'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -12,6 +41,9 @@ jobs:
   build-ltf-bridge:
     name: Build LTF bridge (Windows x64)
     runs-on: windows-latest
+    env:
+      # workflow_call 时 github.ref_name 是调用方分支名，必须优先使用传入的 tag
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +61,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Compress-Archive -Force -DestinationPath "artifacts/sona-ltf-bridge-${{ github.ref_name }}.zip" -Path @(
+          Compress-Archive -Force -DestinationPath "artifacts/sona-ltf-bridge-${{ env.RELEASE_TAG }}.zip" -Path @(
             'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
             'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
             'ltk-bridge/native/ltf/README.md',
@@ -40,27 +72,44 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ltf-bridge-release
-          path: artifacts/sona-ltf-bridge-${{ github.ref_name }}.zip
+          path: artifacts/sona-ltf-bridge-${{ env.RELEASE_TAG }}.zip
           if-no-files-found: error
 
   build-and-release:
     needs: build-ltf-bridge
     runs-on: ubuntu-latest
 
+    env:
+      # workflow_call 时 github.ref_name 是调用方分支名，必须优先使用传入的 tag
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      - name: Verify version matches tag
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${RELEASE_TAG#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json 版本（${PKG_VERSION}）与 tag（${RELEASE_TAG}）不一致，请先用 scripts/update-version.mjs 同步"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build plugin
         run: |
+          set -euo pipefail
           # CI 环境：将 loaderPath 指向当前目录，让构建产物输出到项目内
           node -e "
             const pkg = JSON.parse(require('fs').readFileSync('package.json','utf8'));
@@ -69,17 +118,28 @@ jobs:
           "
           npx tsc
           npx vite build
+          # 补发旧 tag（自动更新引导器之前）时没有该脚本，跳过自动更新契约校验
+          if [ -f scripts/check-build.mjs ]; then node scripts/check-build.mjs; fi
+
+      - name: Download LTF bridge artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ltf-bridge-release
+          path: artifacts/ltf
 
       - name: Prepare release package
         run: |
+          set -euo pipefail
           mkdir -p release/sona
-          # 复制构建产物
-          cp dist/index.js release/sona/
-          cp dist/index.css release/sona/
-          # 复制 assets（如果存在）
-          if [ -d "dist/assets" ]; then
-            cp -r dist/assets release/sona/
+          # 新版：冻结引导器 + 可更新应用包 + 更新清单；旧 tag：单文件 index.js / index.css
+          if [ -f dist/app.js ]; then
+            cp dist/index.js dist/app.js dist/app.css dist/version.json dist/update.json release/sona/
+          else
+            cp dist/index.js dist/index.css release/sona/
           fi
+          # 随插件包分发原生 LTF bridge，供本地 ltk-bridge 后台直接使用
+          mkdir -p release/sona/ltk
+          unzip -o "artifacts/ltf/sona-ltf-bridge-${RELEASE_TAG}.zip" -d release/sona/ltk
           # 预留用户自定义资源目录，用户可把头像、背景等图片放到这里
           mkdir -p release/sona/assets
           cat > release/sona/assets/README.txt <<'EOF'
@@ -93,43 +153,75 @@ jobs:
           EOF
           # 打包
           cd release
-          zip -r ../sona-${{ github.ref_name }}.zip sona/
+          zip -r "../sona-${RELEASE_TAG}.zip" sona/
 
-      - name: Generate release notes
+      - name: Resolve release notes
         id: notes
+        env:
+          PROVIDED_NOTES: ${{ inputs.notes }}
         run: |
-          TAG=${{ github.ref_name }}
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          # 尝试从 CHANGELOG.md 提取当前版本的内容
-          if [ -f CHANGELOG.md ]; then
-            # 提取两个版本标题之间的内容
-            NOTES=$(sed -n "/^## \[${TAG#v}\]/,/^## \[/{ /^## \[${TAG#v}\]/d; /^## \[/d; p; }" CHANGELOG.md)
-            if [ -z "$NOTES" ]; then
-              # 如果没有匹配到，提取第一个版本块
-              NOTES=$(sed -n '/^## \[/,/^## \[/{//!p;}' CHANGELOG.md | head -50)
-            fi
+          set -euo pipefail
+          NOTES=""
+          if [ -n "$PROVIDED_NOTES" ]; then
+            NOTES="$PROVIDED_NOTES"
+          elif [ -f CHANGELOG.md ]; then
+            # 提取当前版本标题到下一个版本标题之间的内容
+            TAG_VERSION="${RELEASE_TAG#v}"
+            ESCAPED_VERSION=${TAG_VERSION//./\\.}
+            NOTES=$(sed -n "/^## \[${ESCAPED_VERSION}\]/,/^## \[/{ /^## \[${ESCAPED_VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md || true)
           fi
-          if [ -z "$NOTES" ]; then
-            NOTES="Release ${TAG}"
+          if [ -z "${NOTES//[[:space:]]/}" ]; then
+            NOTES="Release ${RELEASE_TAG}"
           fi
-          # 写入多行输出
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "notes<<EOF_RELEASE_NOTES"
+            printf '%s\n' "$NOTES"
+            echo "EOF_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Download LTF bridge artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ltf-bridge-release
-          path: artifacts/ltf
+      - name: Publish update artifacts (dist tag)
+        run: |
+          set -euo pipefail
+          DIST_TAG="dist-${RELEASE_TAG}"
+
+          # 补发旧 tag（自动更新引导器之前）没有 app.js，跳过自动更新产物发布
+          if [ ! -f "$GITHUB_WORKSPACE/dist/app.js" ]; then
+            echo "旧 tag 没有 app.js，跳过 dist 更新产物发布"
+            exit 0
+          fi
+
+          # 发布标签不可变：已存在则跳过，让重跑可以继续创建/更新 GitHub Release
+          if git ls-remote --exit-code --tags origin "refs/tags/${DIST_TAG}" >/dev/null 2>&1; then
+            echo "::warning::标签 ${DIST_TAG} 已存在，跳过更新产物发布（保留不可变标签）。如需重新生成产物，请发布新版本。"
+            exit 0
+          fi
+
+          # 用独立 worktree 发布 dist，避免清空主工作区（Release zip 仍在工作区根目录）
+          WORKTREE="$(mktemp -d)"
+          git worktree add --detach "$WORKTREE" HEAD
+          cd "$WORKTREE"
+          git checkout --orphan "dist-publish-${GITHUB_RUN_ID}"
+          git rm -rf .
+          cp "$GITHUB_WORKSPACE/dist/app.js" "$GITHUB_WORKSPACE/dist/app.css" "$GITHUB_WORKSPACE/dist/update.json" .
+          git add app.js app.css update.json
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore: 发布更新产物 ${DIST_TAG}"
+          git push --force origin HEAD:dist
+          git tag "${DIST_TAG}"
+          git push origin "${DIST_TAG}"
+
+          cd "$GITHUB_WORKSPACE"
+          git worktree remove "$WORKTREE" --force
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Sona ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Sona ${{ env.RELEASE_TAG }}
           body: ${{ steps.notes.outputs.notes }}
           files: |
-            sona-${{ github.ref_name }}.zip
-            artifacts/ltf/sona-ltf-bridge-${{ github.ref_name }}.zip
+            sona-${{ env.RELEASE_TAG }}.zip
+            artifacts/ltf/sona-ltf-bridge-${{ env.RELEASE_TAG }}.zip
           draft: false
           prerelease: false

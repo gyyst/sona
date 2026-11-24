@@ -41,14 +41,14 @@ export function AboutPage() {
           </ul>
           <a
             className="sona-hex-card sona-hex-card-link"
-            href="https://github.com/WJZ-P/sona"
+            href="https://github.com/gyyst/sona"
             target="_blank"
             rel="noopener noreferrer"
           >
             <span className="sona-hex-card-icon"><GitHubIcon /></span>
             <div className="sona-hex-card-text">
               <span className="sona-hex-card-label">GitHub</span>
-              <span className="sona-hex-card-value">WJZ-P/sona</span>
+              <span className="sona-hex-card-value">gyyst/sona</span>
             </div>
           </a>
         </div>

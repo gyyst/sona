@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
-# 开发模式：启动 Vite 开发服务器并生成 Pengu 开发入口
+#
+# Sona 开发模式：启动 Vite dev server（Pengu 从 dev entry 加载，支持 HMR）
+# 用法：bash scripts/dev/dev.sh
+# 日志：logs/dev.log
+
 set -euo pipefail
 
-cd "$(dirname "$0")/../.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${ROOT_DIR}"
+mkdir -p logs
 
-npm run dev
+LOG_FILE="logs/dev.log"
+
+{
+  echo "===== Sona dev server: $(date '+%Y-%m-%d %H:%M:%S') ====="
+  npm run dev
+} 2>&1 | tee "${LOG_FILE}"

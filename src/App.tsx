@@ -15,7 +15,7 @@ import { UpdatePage } from '@/components/pages/UpdatePage'
 import { HomeIcon, GamepadIcon, DashboardIcon, PaletteIcon, SettingsIcon, InfoIcon, BugIcon, ZapIcon, GiftIcon } from '@/components/ui/icons'
 import { onModalVisibilityChange, isModalVisible, closeModal } from '@/lib/modal'
 import { store } from '@/lib/store'
-import { getUpdateState, onUpdateStateChange, type UpdateState } from '@/lib/update-checker'
+import { getUpdateState, isUpdateAttentionRequired, onUpdateStateChange, type UpdateState } from '@/lib/update/update-checker'
 import { useI18n } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 
@@ -31,10 +31,6 @@ const baseSidebarItemConfigs: Array<Omit<SidebarItem, 'label'> & { labelKey: Tra
 
 const debugSidebarItemConfig: Omit<SidebarItem, 'label'> & { labelKey: TranslationKey } = {
   id: 'debug', icon: <BugIcon />, labelKey: 'nav.debug',
-}
-
-const updateSidebarItemConfig: Omit<SidebarItem, 'label'> & { labelKey: TranslationKey } = {
-  id: 'update', icon: <ZapIcon />, labelKey: 'nav.updateAvailable',
 }
 
 function PageContent({ pageId }: { pageId: string }) {
@@ -62,10 +58,16 @@ function PageContent({ pageId }: { pageId: string }) {
   }
 }
 
+function getUpdateNavLabelKey(state: UpdateState): TranslationKey {
+  if (state.status === 'ready' || (state.status === 'checking' && Boolean(state.pendingVersion))) return 'nav.updateReady'
+  if (state.status === 'error') return 'nav.updateError'
+  return 'nav.updateAvailable'
+}
+
 export function App() {
   const { t } = useI18n()
   const [visible, setVisible] = useState(isModalVisible())
-  const [activePageId, setActivePageId] = useState(() => (getUpdateState().status === 'available' ? 'update' : 'home'))
+  const [activePageId, setActivePageId] = useState(() => (isUpdateAttentionRequired(getUpdateState()) ? 'update' : 'home'))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(store.get('sidebarCollapsed'))
   const [devMode, setDevMode] = useState(store.get('developerMode'))
   const [updateState, setUpdateState] = useState<UpdateState>(() => getUpdateState())
@@ -75,7 +77,7 @@ export function App() {
       const rootConnected = Boolean(document.getElementById('sona-root')?.isConnected)
       logger.debug('Modal visibility changed: %s (root in DOM: %s)', String(v), String(rootConnected))
       setVisible(v)
-      if (v && getUpdateState().status === 'available') {
+      if (v && isUpdateAttentionRequired(getUpdateState())) {
         setActivePageId('update')
       }
     })
@@ -95,7 +97,8 @@ export function App() {
   useEffect(() => {
     return onUpdateStateChange((state) => {
       setUpdateState(state)
-      if (state.status !== 'available' && activePageId === 'update') {
+      // 只有流程真正结束（无更新/已跳过）才离开更新页；错误页保留给用户处理
+      if (state.status === 'latest' && activePageId === 'update') {
         setActivePageId('home')
       }
     })
@@ -109,11 +112,18 @@ export function App() {
       label: t(item.labelKey),
     })
     const baseItems = baseSidebarItemConfigs.map(makeItem)
-    const items = updateState.status === 'available'
-      ? [makeItem(updateSidebarItemConfig), ...baseItems]
+    const items = isUpdateAttentionRequired(updateState)
+      ? [
+        {
+          id: 'update',
+          icon: <ZapIcon />,
+          label: t(getUpdateNavLabelKey(updateState)),
+        },
+        ...baseItems,
+      ]
       : baseItems
     return devMode ? [...items, makeItem(debugSidebarItemConfig)] : items
-  }, [devMode, t, updateState.status])
+  }, [devMode, t, updateState])
 
   const handleClose = () => {
     closeModal()

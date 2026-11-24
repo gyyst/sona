@@ -3,24 +3,24 @@
 
 <div align="center">
 
-  <a href="https://github.com/WJZ-P/sona/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/WJZ-P/sona.svg?style=flat-square" alt="Contributors" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/gyyst/sona.svg?style=flat-square" alt="Contributors" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/network/members">
-    <img src="https://img.shields.io/github/forks/WJZ-P/sona.svg?style=flat-square" alt="Forks" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/network/members">
+    <img src="https://img.shields.io/github/forks/gyyst/sona.svg?style=flat-square" alt="Forks" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/stargazers">
-    <img src="https://img.shields.io/github/stars/WJZ-P/sona.svg?style=flat-square" alt="Stargazers" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/stargazers">
+    <img src="https://img.shields.io/github/stars/gyyst/sona.svg?style=flat-square" alt="Stargazers" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/issues">
-    <img src="https://img.shields.io/github/issues/WJZ-P/sona.svg?style=flat-square" alt="Issues" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/issues">
+    <img src="https://img.shields.io/github/issues/gyyst/sona.svg?style=flat-square" alt="Issues" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/WJZ-P/sona.svg?style=flat-square" alt="License" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/gyyst/sona.svg?style=flat-square" alt="License" style="height: 30px">
   </a>
 
 </div>
@@ -30,7 +30,7 @@
 <!-- PROJECT LOGO -->
 
 <p align="center">
-  <a href="https://github.com/WJZ-P/sona/">
+  <a href="https://github.com/gyyst/sona/">
     <img src="assets/Champie_Sona_profileicon.png" alt="Logo" width="200" height="200" style="border-radius: 4px;">
   </a>
 </p>
@@ -44,9 +44,9 @@
   <br>
   <a href="#安装">快速开始</a>
   ·
-  <a href="https://github.com/WJZ-P/sona/issues">报告 Bug</a>
+  <a href="https://github.com/gyyst/sona/issues">报告 Bug</a>
   ·
-  <a href="https://github.com/WJZ-P/sona/issues">提出新特性</a>
+  <a href="https://github.com/gyyst/sona/issues">提出新特性</a>
 </p>
 
 <!-- LYRICS -->
@@ -188,7 +188,7 @@
 | 🎁 | **通行证奖励领取** | 展示所有待选择奖励，可按奖励规则勾选领取，也可「一键领取」全部 |
 | 🪟 | **窗口特效** | 毛玻璃、亚克力、混合、云母（Win11）、透明等窗口视觉效果 |
 | ✨ | **全局粒子美化** | 为客户端添加星光粒子背景效果 |
-| 🔔 | **版本更新检查** | 启动时检查新版本，可查看发布说明、前往 Release 或暂时跳过该版本 |
+| 🔄 | **自动更新** | 启动时自动检查、下载并校验新版本，重启客户端后生效；支持“仅提示 / 关闭自动检查”，失败时回退本地并保留手动下载入口 |
 | 🔧 | **开发者调试面板** | 完整的 LCU API 调试工具，含战绩、聊天、回放、配装、签名解析和对局分析模拟等 |
 
 </details>
@@ -331,7 +331,7 @@
 <img src="markdown/pengu1.png" alt="Pengu Loader" width="70%">
 </p>
 
-2. 从本项目的 [Releases](https://github.com/WJZ-P/sona/releases) 下载最新的 `sona-vX.Y.Z.zip`（**不要下载项目源码使用**），解压得到 `sona` 文件夹。文件夹里应该有 `index.js`、`index.css` 和 `assets` 文件夹。
+2. 从本项目的 [Releases](https://github.com/gyyst/sona/releases) 下载最新的 `sona-v2026.11.24.1.zip` 这样的安装包（版本号格式为 `v年.月.日.序号`，**不要下载项目源码使用**），解压得到 `sona` 文件夹。文件夹里应该有 `index.js`、`app.js`、`app.css`、`version.json`、`update.json` 和 `assets` 文件夹。
 
 3. 在 Pengu Loader 中点击上方的 Plugins，再点右下角「打开插件目录」，把 `sona` 文件夹整个拖进去（Loader 不支持直接拖入文件）。
 
@@ -345,7 +345,12 @@
 <img src="markdown/pengu2.png" alt="Pengu Loader 插件列表" width="70%">
 </p>
 
-> 💡 **升级新版本**：下载新的压缩包直接覆盖解压即可，**不要先删除整个 `sona` 文件夹**，否则 `assets` 里你放的壁纸、头像等自定义资源会一起丢失。插件设置保存在 Pengu Loader 的 DataStore 中，升级不受影响。Sona 启动时也会自动检查新版本并提示。
+> 💡 **升级新版本**：
+> - **从 v1.12.1 及更早版本升级**：旧版本没有引导器，必须手动下载一次新压缩包并覆盖解压，之后才能自动更新。
+> - **已安装含引导器的版本**：Sona 会自动检查、下载并校验新版本；更新页显示“已就绪”后重启客户端即可生效，无需再手动下载。
+> - 覆盖安装或自动更新都**不会**删除 `sona/assets/`，壁纸、头像等自定义资源会保留；插件设置保存在 Pengu Loader 的 DataStore 中，升级不受影响。
+>
+> 🔗 本项目的发布与自动更新源统一为 [gyyst/sona](https://github.com/gyyst/sona)，`pengu.yml` 与更新检查均指向该仓库。
 
 <br>
 
@@ -357,7 +362,7 @@
    - **工具** — 对局、配装、战绩、社交、界面相关的功能开关与配置
    - **美化** — 主页壁纸、毛玻璃、导航栏、自定义头像、流光昵称、资源管理
    - **领取** — 通行证待选奖励领取
-   - **设置** — 界面语言、面板快捷键、隐藏入口图标、全局粒子、开发者模式
+   - **设置** — 界面语言、自动更新、面板快捷键、隐藏入口图标、全局粒子、开发者模式
 4. 所有设置自动持久化，下次启动自动恢复
 
 <br>
@@ -429,7 +434,9 @@ flowchart TD
 ```
 sona/
 ├── src/
-│   ├── index.tsx                      # 插件入口（init / load 生命周期）
+│   ├── bootstrap/
+│   │   └── index.ts                   # 冻结引导器（选择本地 / IndexedDB / 远程应用包）
+│   ├── index.tsx                      # 应用包入口（init / load 生命周期）
 │   ├── App.tsx                        # 主应用（侧边栏 + 页面路由）
 │   ├── i18n/                          # 轻量多语言（中 / 英 / 跟随客户端）
 │   ├── data/
@@ -449,7 +456,7 @@ sona/
 │   │   ├── player-strength-score.ts   # 牛马检测器 / 对局分析的评分算法
 │   │   ├── champ-select-puuid.ts      # 匿名选人模式的 PUUID 还原
 │   │   ├── image-hosting-service.ts   # 自定义头像图床上传
-│   │   ├── update-checker.ts          # 版本更新检查
+│   │   ├── update/                    # 自动更新（版本检查 / 下载校验 / 指针与缓存 / 状态机）
 │   │   ├── plugin-resolver.ts         # 插件资源路径解析
 │   │   ├── assets.ts                  # 游戏资源映射（装备 / 技能 / 英雄 / 符文 / 队列 / 地图）
 │   │   ├── modal.ts                   # 面板显隐 + 快捷键
@@ -464,18 +471,32 @@ sona/
 │   │   └── ui/                        # 通用组件与弹窗（战绩、整局详情、对局分析、配装推荐、生涯背景、旗帜……）
 │   └── styles/                        # 页面与组件样式
 ├── scripts/
-│   ├── dev/                           # 客户端依赖 / 检查 / 构建 / 开发
+│   ├── build.sh                       # 本地构建（tsc + vite + 自动更新产物契约校验）
+│   ├── publish.sh                     # 本地一键触发发布工作流
+│   ├── next-version.mjs               # 计算下一个版本号（年.月.日.序号）
+│   ├── update-version.mjs             # 同步 package.json / package-lock.json 的版本号
+│   ├── prepend-changelog.mjs          # 向 CHANGELOG.md 插入新版本块
+│   ├── check-build.mjs                # 构建产物契约校验（纯文本负载 / 无共享 chunk）
+│   ├── update-champion-balance.ts     # 从 LoL Wiki 抓取模式平衡数据
 │   ├── ltk/                           # LTK 后台安装 / 运行 / 检查 / 测试
-│   └── update-champion-balance.ts     # 从 Fandom LoL Wiki 抓取模式平衡数据
+│   └── dev/
+│       ├── dev.sh                     # 开发模式（Vite dev server + HMR）
+│       ├── check.sh                   # 类型检查 + 构建不变量校验
+│       └── install.sh                 # 依赖安装
 ├── ltk-bridge/                        # 可选的游戏内换肤后台（Python + uv）
 │   ├── src/sona_ltk/                  # WebSocket / LTF bridge / 资源下载 / 注入状态机
 │   ├── native/ltf/                    # LTF bridge 源码与 Windows 构建脚本
 │   └── config.example.json            # 端口、token、LTK 路径、皮肤库配置
-├── docs/                              # 功能说明文档
+├── docs/
+│   ├── auto-update.md                 # 自动更新架构、发布流程、安全边界与排障
+│   ├── release.md                     # 发布流程与版本号规则
+│   └── skin-changer.md                # 换肤与 LTK Manager 注入说明
 ├── .github/
 │   └── workflows/
-│       ├── release.yml                # 推 v* tag 自动构建并发布 Release
-│       └── update-balance.yml         # 每周定时同步平衡数据并自动发布补丁版本
+│       ├── publish.yml                # 一键发布：计算版本 → 提交 → 打 tag → 构建发布
+│       ├── release.yml                # 构建发布 Release 与 dist-v* 自动更新产物
+│       ├── ltk-bridge.yml             # Windows 构建原生 LTF bridge 并测试后台
+│       └── update-balance.yml         # 每周定时同步平衡数据并自动发布新版本
 ├── assets/                            # 静态资源（Sona 头像）
 ├── markdown/                          # README 配图
 ├── CHANGELOG.md                       # 版本变更日志
@@ -549,7 +570,7 @@ sona/
 
 <h2 id="license">📄 License</h2>
 
-该项目签署了 AGPL-3.0 授权许可，详情请参阅 [LICENSE](https://github.com/WJZ-P/sona/blob/main/LICENSE)
+该项目签署了 AGPL-3.0 授权许可，详情请参阅 [LICENSE](https://github.com/gyyst/sona/blob/main/LICENSE)
 
 <br>
 
@@ -589,7 +610,7 @@ Sona 能走到今天，离不开这些前辈们的无私开源。站在前人的
 >
 > 也 **不接受 Pull Request** (｡•́︿•̀｡)
 >
-> 但是非常欢迎提出建议和反馈！请到 [Issues](https://github.com/WJZ-P/sona/issues) 畅所欲言～ ₍ᐢ..ᐢ₎♡
+> 但是非常欢迎提出建议和反馈！请到 [Issues](https://github.com/gyyst/sona/issues) 畅所欲言～ ₍ᐢ..ᐢ₎♡
 
 <br>
 
@@ -597,4 +618,4 @@ Sona 能走到今天，离不开这些前辈们的无私开源。站在前人的
 
 ## ⭐ Star 历史
 
-[![Stargazers over time](https://starchart.cc/WJZ-P/sona.svg?variant=adaptive)](https://starchart.cc/WJZ-P/sona)
+[![Stargazers over time](https://starchart.cc/gyyst/sona.svg?variant=adaptive)](https://starchart.cc/gyyst/sona)

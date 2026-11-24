@@ -24,6 +24,14 @@ import type { SkinRandomScope } from '@/lib/features/skin-changer/state'
 
 // ==================== 配置项定义 ====================
 
+/** 自动更新模式：auto=自动检查并下载，notify=只提示，off=不自动检查 */
+export type AutoUpdateMode = 'auto' | 'notify' | 'off'
+
+/** 读取时校验自动更新模式，非法值回退为 auto */
+export function normalizeAutoUpdateMode(value: unknown): AutoUpdateMode {
+  return value === 'notify' || value === 'off' ? value : 'auto'
+}
+
 /** 所有配置项及其类型 */
 export interface SonaConfig {
   /** 自动接受对局 */
@@ -56,6 +64,8 @@ export interface SonaConfig {
   locale: 'auto' | 'zh-CN' | 'en-US'
   /** 已跳过提醒的 Sona 版本号 */
   skippedUpdateVersion: string | null
+  /** 自动更新模式：auto=自动检查并下载，notify=只提示，off=不自动检查 */
+  autoUpdateMode: AutoUpdateMode
   /** 窗口视觉特效 */
   windowEffect: string
   /** 英雄选择玩家头像交互（点击队友头像展示历史数据） */
@@ -284,6 +294,7 @@ const DEFAULT_CONFIG: SonaConfig = {
   hideSonaIcon: false,
   locale: 'auto',
   skippedUpdateVersion: null,
+  autoUpdateMode: 'auto',
   windowEffect: 'none',
   champSelectAssist: false,
   champSelectTierBadge: false,
@@ -490,7 +501,9 @@ class SonaStore {
 
   private readFromDisk<K extends ConfigKey>(key: K): SonaConfig[K] {
     const stored = DataStore.get<SonaConfig[K]>(`${KEY_PREFIX}${key}`)
-    return stored !== undefined ? stored : DEFAULT_CONFIG[key]
+    if (stored === undefined) return DEFAULT_CONFIG[key]
+    if (key === 'autoUpdateMode') return normalizeAutoUpdateMode(stored) as SonaConfig[K]
+    return stored
   }
 }
 

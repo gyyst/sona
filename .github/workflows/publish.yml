@@ -1,0 +1,127 @@
+name: Publish Release
+
+# 一键发布：在 Actions 页面点击 Run workflow 即可。
+# 流程：计算当天递增版本号 → 同步版本号与 CHANGELOG → 提交 main → 打 tag → 构建并发布 Release。
+# 版本号格式：年.月.日.序号（北京时间），例如 2026.11.24.1、2026.11.24.2。
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: '发布说明（Markdown）。留空则自动汇总上次发布以来的提交记录'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+# 与 update-balance.yml 共用同一分组，保证发布相关操作串行执行
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with remote
+        run: git pull --rebase origin main
+
+      - name: Compute next version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION=$(node scripts/next-version.mjs)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "下一个发布版本：v${VERSION}"
+
+      - name: Update version in package files
+        run: node scripts/update-version.mjs "${{ steps.version.outputs.version }}"
+
+      - name: Prepend CHANGELOG entry
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PROVIDED_NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PROVIDED_NOTES" ]; then
+            printf '%s\n' "$PROVIDED_NOTES" > /tmp/release-notes.md
+          else
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
+            if [ -n "$PREV_TAG" ]; then
+              RANGE="${PREV_TAG}..HEAD"
+            else
+              RANGE="HEAD"
+            fi
+            git log --no-merges --pretty=format:'- %s' "$RANGE" \
+              | grep -v '^- chore: 发布 v' > /tmp/release-notes.md || true
+            if [ ! -s /tmp/release-notes.md ]; then
+              echo "- 常规维护与问题修复" > /tmp/release-notes.md
+            fi
+          fi
+          # 日期直接从版本号推导，避免跨午夜时与版本号不一致
+          DATE_DISPLAY=$(echo "$VERSION" | awk -F. '{printf "%s-%s-%s", $1, $2, $3}')
+          node scripts/prepend-changelog.mjs "$VERSION" "$DATE_DISPLAY" /tmp/release-notes.md
+
+      - name: Commit, tag and push
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore: 发布 ${TAG}"
+
+          # 推送 main：若远端有新提交则 rebase 后重试
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::推送 main 失败，请稍后重试发布"
+              exit 1
+            fi
+            echo "推送被拒绝，第 ${attempt} 次重试前先同步远端 main"
+            if ! git pull --rebase origin main; then
+              git rebase --abort || true
+              echo "::error::同步远端 main 时发生冲突，请手动处理后重新发布"
+              exit 1
+            fi
+          done
+
+          # tag 冲突说明同名版本已被占用，直接失败让人工重跑（重跑会自动取下一个序号）
+          if ! git tag "$TAG"; then
+            echo "::error::tag ${TAG} 已存在，请重新运行本工作流以获取新序号"
+            exit 1
+          fi
+          git push origin "$TAG"
+
+          echo "✓ 已推送 ${TAG}"
+
+  release:
+    needs: prepare
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+      notes: ${{ inputs.notes }}
