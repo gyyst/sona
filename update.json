@@ -1,0 +1,13 @@
+{
+  "version": "2026.11.24.1",
+  "files": {
+    "app.js": {
+      "sha256": "77dcd1bb70b9be2a25a47a3d4abcd7253929a4d19b7c10338e76ac56404d7fec",
+      "size": 1511609
+    },
+    "app.css": {
+      "sha256": "03e0c18b39ad6d127a24f60b1cdcdab73161e68183b03031020557abceea7b22",
+      "size": 120105
+    }
+  }
+}
