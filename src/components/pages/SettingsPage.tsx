@@ -3,8 +3,16 @@ import { SettingCard, SettingGroup } from '@/components/ui/SettingCard'
 import { SonaSwitch } from '@/components/ui/SonaSwitch'
 import { SonaSelect } from '@/components/ui/SonaSelect'
 import { SonaButton } from '@/components/ui/SonaButton'
-import { store } from '@/lib/store'
-import { checkForUpdates, clearSkippedUpdateVersion } from '@/lib/update-checker'
+import { store, normalizeAutoUpdateMode, type AutoUpdateMode } from '@/lib/store'
+import {
+  checkForUpdates,
+  clearSkippedUpdateVersion,
+  getUpdateState,
+  onUpdateStateChange,
+  type UpdateState,
+} from '@/lib/update/update-checker'
+import { getUpdateErrorText, getUpdateStatusText } from '@/components/ui/update/update-status'
+import { restoreLocalVersion } from '@/lib/update/update-runtime'
 import { useI18n, type SonaLocaleSetting } from '@/i18n'
 import '@/styles/SettingsPage.css'
 
@@ -23,11 +31,23 @@ export function SettingsPage() {
   const [hideSonaIcon, setHideSonaIcon] = useState(store.get('hideSonaIcon'))
   const [globalParticle, setGlobalParticle] = useState(store.get('globalParticle'))
   const [skippedUpdateVersion, setSkippedUpdateVersion] = useState(store.get('skippedUpdateVersion'))
+  const [autoUpdateMode, setAutoUpdateMode] = useState<AutoUpdateMode>(() => store.get('autoUpdateMode'))
+  const [updateState, setUpdateState] = useState<UpdateState>(() => getUpdateState())
   const localeOptions = [
     { value: 'auto', label: t('settings.language.auto') },
     { value: 'zh-CN', label: t('settings.language.zhCN') },
     { value: 'en-US', label: t('settings.language.enUS') },
   ]
+  const autoUpdateOptions = [
+    { value: 'auto', label: t('settings.autoUpdate.auto') },
+    { value: 'notify', label: t('settings.autoUpdate.notify') },
+    { value: 'off', label: t('settings.autoUpdate.off') },
+  ]
+  const canRestoreLocal = updateState.runtime.source !== 'local' || Boolean(updateState.pendingVersion)
+  const updateBusy = updateState.status === 'checking' || updateState.status === 'downloading'
+  const updateStatusText = updateState.status === 'error'
+    ? getUpdateErrorText(updateState, t)
+    : getUpdateStatusText(updateState, t)
 
   useEffect(() => {
     const unsubs = [
@@ -36,6 +56,8 @@ export function SettingsPage() {
       store.onChange('hideSonaIcon', setHideSonaIcon),
       store.onChange('globalParticle', setGlobalParticle),
       store.onChange('skippedUpdateVersion', setSkippedUpdateVersion),
+      store.onChange('autoUpdateMode', setAutoUpdateMode),
+      onUpdateStateChange(setUpdateState),
     ]
     return () => unsubs.forEach((fn) => fn())
   }, [])
@@ -83,6 +105,41 @@ export function SettingsPage() {
             onChange={(v) => { setGlobalParticle(v); store.set('globalParticle', v) }}
           />
         </SettingCard>
+        <SettingCard
+          title={t('settings.autoUpdate.title')}
+          description={t('settings.autoUpdate.description')}
+        >
+          <SonaSelect
+            options={autoUpdateOptions}
+            value={autoUpdateMode}
+            onChange={(v) => {
+              const mode = normalizeAutoUpdateMode(v)
+              setAutoUpdateMode(mode)
+              store.set('autoUpdateMode', mode)
+            }}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('settings.updateCheck.title')}
+          description={t('settings.updateCheck.description')}
+        >
+          <div className="sona-settings-update-control">
+            <SonaButton
+              disabled={updateBusy}
+              onClick={() => { void checkForUpdates() }}
+            >
+              {t('settings.updateCheck.button')}
+            </SonaButton>
+            {updateStatusText && (
+              <p
+                className={`sona-settings-update-status${updateState.status === 'error' ? ' sona-settings-update-status--error' : ''}`}
+                title={updateStatusText}
+              >
+                {updateStatusText}
+              </p>
+            )}
+          </div>
+        </SettingCard>
         {skippedUpdateVersion && (
           <SettingCard
             title={t('settings.skippedUpdate.title', { version: skippedUpdateVersion })}
@@ -100,6 +157,16 @@ export function SettingsPage() {
 
 
       <SettingGroup title={t('settings.group.advanced')}>
+        {canRestoreLocal && (
+          <SettingCard
+            title={t('settings.restoreLocal.title')}
+            description={t('settings.restoreLocal.description')}
+          >
+            <SonaButton onClick={() => { void restoreLocalVersion() }}>
+              {t('settings.restoreLocal.button')}
+            </SonaButton>
+          </SettingCard>
+        )}
         <SettingCard
           title={t('settings.developerMode.title')}
           description={t('settings.developerMode.description')}

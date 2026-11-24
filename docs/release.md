@@ -65,7 +65,16 @@ git push origin v2026.11.24.3
 构建失败或漏发时，可在 **Actions → Release → Run workflow** 中填写要发布或重新发布的 tag：
 
 - 构建失败后可原样重试；已存在的 Release 会被更新，不会产生重复。
-- 也可用于补发历史 tag（例如早前自动发布未生成 Release 的 `v1.12.1`）。
+- 已存在的 `dist-v*` 更新产物标签会在重跑时被跳过（标签不可变），不会阻塞 Release 创建/更新。
+- 也可用于补发历史 tag（例如早前自动发布未生成 Release 的 `v1.12.1`）。补发自动更新之前的旧 tag 时，工作流会跳过 `dist-v*` 更新产物发布，只创建/更新 GitHub Release。
+
+## 自动更新产物
+
+`release.yml` 在创建 GitHub Release 的同时，会把 `app.js`、`app.css`、`update.json` 发布到 `dist-v<version>` 标签（例如 `dist-v2026.11.24.1`）。客户端自动更新只读取这个标签，不读取 Release 附件。
+
+- `dist-v*` 标签不可变，不要删除或移动；发布事故请用新版本修复。
+- 若 `dist-v*` 标签已推送但 Release 创建失败，直接重跑工作流即可：已存在的标签会被跳过，Release 会被创建/更新。
+- `dist` 分支只保留最新一次产物，用于调试；历史版本仍在各自的 `dist-v*` 标签中。
 
 ## 相关脚本
 
@@ -75,8 +84,11 @@ git push origin v2026.11.24.3
 | `scripts/update-version.mjs` | 同步 `package.json` 与 `package-lock.json` 的版本号 |
 | `scripts/prepend-changelog.mjs` | 向 `CHANGELOG.md` 顶部插入新版本块 |
 | `scripts/publish.sh` | 本地一键触发发布工作流 |
-| `scripts/build.sh` | 本地构建插件产物（`--install` 可重新安装依赖） |
+| `scripts/build.sh` | 本地构建插件产物并校验自动更新契约（`--install` 可重新安装依赖） |
+| `scripts/dev/dev.sh` | 本地开发模式（Vite dev server + HMR） |
+| `scripts/dev/check.sh` | 类型检查 + 构建不变量校验 |
+| `scripts/dev/install.sh` | 依赖安装 |
 
 ## 客户端兼容性
 
-客户端内置的更新检查按版本号的数字段逐段比较（见 `src/lib/update-checker.ts`），四段式版本号可以正确比较。新版本号的首段（年份，如 `2026`）大于历史版本的首段（如 `1`），因此旧客户端能正确识别并提示新版本。
+客户端内置的更新检查按版本号的数字段逐段比较（见 `src/lib/update/update-checker.ts`），四段式版本号可以正确比较。新版本号的首段（年份，如 `2026`）大于历史版本的首段（如 `1`），因此旧客户端能正确识别并提示新版本。

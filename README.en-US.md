@@ -2,24 +2,24 @@
 
 <div align="center">
 
-  <a href="https://github.com/WJZ-P/sona/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/WJZ-P/sona.svg?style=flat-square" alt="Contributors" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/gyyst/sona.svg?style=flat-square" alt="Contributors" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/network/members">
-    <img src="https://img.shields.io/github/forks/WJZ-P/sona.svg?style=flat-square" alt="Forks" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/network/members">
+    <img src="https://img.shields.io/github/forks/gyyst/sona.svg?style=flat-square" alt="Forks" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/stargazers">
-    <img src="https://img.shields.io/github/stars/WJZ-P/sona.svg?style=flat-square" alt="Stargazers" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/stargazers">
+    <img src="https://img.shields.io/github/stars/gyyst/sona.svg?style=flat-square" alt="Stargazers" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/issues">
-    <img src="https://img.shields.io/github/issues/WJZ-P/sona.svg?style=flat-square" alt="Issues" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/issues">
+    <img src="https://img.shields.io/github/issues/gyyst/sona.svg?style=flat-square" alt="Issues" style="height: 30px">
   </a>
   &nbsp;
-  <a href="https://github.com/WJZ-P/sona/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/WJZ-P/sona.svg?style=flat-square" alt="License" style="height: 30px">
+  <a href="https://github.com/gyyst/sona/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/gyyst/sona.svg?style=flat-square" alt="License" style="height: 30px">
   </a>
 
 </div>
@@ -27,7 +27,7 @@
 <br>
 
 <p align="center">
-  <a href="https://github.com/WJZ-P/sona/">
+  <a href="https://github.com/gyyst/sona/">
     <img src="assets/Champie_Sona_profileicon.png" alt="Sona" width="200" height="200" style="border-radius: 4px;">
   </a>
 </p>
@@ -41,9 +41,9 @@
   <br>
   <a href="#installation">Quick Start</a>
   ·
-  <a href="https://github.com/WJZ-P/sona/issues">Report Bug</a>
+  <a href="https://github.com/gyyst/sona/issues">Report Bug</a>
   ·
-  <a href="https://github.com/WJZ-P/sona/issues">Request Feature</a>
+  <a href="https://github.com/gyyst/sona/issues">Request Feature</a>
 </p>
 
 <p align="center">
@@ -169,7 +169,7 @@ Sona focuses on practical quality-of-life improvements: champion select tools, m
 | 🎁 | **Battle Pass Rewards** | Review pending choice rewards and claim only the items you select, or claim everything in one click. |
 | 🪟 | **Window Effects** | Blur-behind, acrylic, unified, mica (Win11), and transparent window effects. |
 | ✨ | **Global Particles** | Adds star-like particles to the client background. |
-| 🔔 | **Update Checker** | Checks releases on startup and lets you read the notes, open the release, or skip a version. |
+| 🔄 | **Auto Update** | Checks, downloads, and verifies new versions on startup, then applies after a client restart; supports notify-only / off modes and falls back to the local version with manual download links on failure. |
 | 🔧 | **Debug Panel** | LCU, chat, replay, builds, status-payload inspection, and mock game-analysis tools for advanced users. |
 
 </details>
@@ -274,12 +274,17 @@ Sona focuses on practical quality-of-life improvements: champion select tools, m
 ### Steps
 
 1. Install Pengu Loader from the [Pengu Loader releases](https://github.com/PenguLoader/PenguLoader), start it, and make sure it shows `ready`.
-2. Download the latest `sona-v2026.11.24.1.zip` package from this repository's [Releases](https://github.com/WJZ-P/sona/releases) page (the version format is `v<year>.<month>.<day>.<serial>`). Do not use the source-code archive as a plugin package.
+2. Download the latest `sona-v2026.11.24.1.zip` package from this repository's [Releases](https://github.com/gyyst/sona/releases) page (the version format is `v<year>.<month>.<day>.<serial>`). Do not use the source-code archive as a plugin package.
 3. In Pengu Loader, open the Plugins tab and click "Open plugins folder".
-4. Extract the `sona` folder into the plugins folder. It should contain `index.js`, `index.css`, and an `assets` folder.
+4. Extract the `sona` folder into the plugins folder. It should contain `index.js`, `app.js`, `app.css`, `version.json`, `update.json`, and an `assets` folder.
 5. Click "Refresh" in Pengu Loader, make sure `sona` is checked, and restart the League client.
 
-> 💡 **Upgrading**: extract the new package over the existing folder. **Do not delete the whole `sona` folder first** — custom wallpapers and avatars you placed in `assets` would be lost. Settings are stored in Pengu Loader's DataStore and survive upgrades. Sona also checks for new releases on startup.
+> 💡 **Upgrading**:
+> - **From v1.12.1 or earlier**: those versions have no bootstrap, so you must install a new zip manually once. Automatic updates start from the next version.
+> - **Already running a bootstrap-enabled version**: Sona checks, downloads, and verifies new versions automatically. Restart the client when the update page says the update is ready.
+> - Installing over the existing folder or applying an automatic update never deletes `sona/assets/`; wallpapers, avatars, and other custom assets are preserved. Settings live in Pengu Loader's DataStore.
+>
+> 🔗 Releases and automatic updates are served from [gyyst/sona](https://github.com/gyyst/sona) only.
 
 ## Usage
 
@@ -346,9 +351,10 @@ Core modules:
 ## Development
 
 ```bash
-npm install
-npm run dev
-npm run build
+bash scripts/dev/install.sh  # npm ci (logs to logs/install.log)
+bash scripts/dev/dev.sh      # Vite dev server + HMR (logs to logs/dev.log)
+bash scripts/build.sh        # tsc + vite build + artifact invariants (logs to logs/build.log)
+bash scripts/dev/check.sh    # type check + build invariants (logs to logs/check.log)
 ```
 
 <details>
@@ -357,7 +363,9 @@ npm run build
 ```text
 sona/
 ├── src/
-│   ├── index.tsx                      # Plugin entry (init / load lifecycle)
+│   ├── bootstrap/
+│   │   └── index.ts                   # Frozen bootstrap (local / IndexedDB / remote app bundle)
+│   ├── index.tsx                      # App bundle entry (init / load lifecycle)
 │   ├── App.tsx                        # Main app (sidebar + page routing)
 │   ├── i18n/                          # Lightweight i18n (zh / en / auto)
 │   ├── data/
@@ -377,7 +385,7 @@ sona/
 │   │   ├── player-strength-score.ts   # Scoring for Deadweight Detector / game analysis
 │   │   ├── champ-select-puuid.ts      # PUUID recovery in anonymous champ select
 │   │   ├── image-hosting-service.ts   # Image hosting for custom avatars
-│   │   ├── update-checker.ts          # Release update checker
+│   │   ├── update/                    # Auto update (check / download / verify / pointer + cache / state machine)
 │   │   ├── plugin-resolver.ts         # Plugin asset path resolution
 │   │   ├── assets.ts                  # Game asset mapping (items / spells / champions / runes / queues / maps)
 │   │   ├── modal.ts                   # Panel visibility + hotkey
@@ -392,19 +400,25 @@ sona/
 │   │   └── ui/                        # Shared components and modals
 │   └── styles/                        # Page and component styles
 ├── scripts/
-│   ├── build.sh                       # Local plugin build
+│   ├── build.sh                       # Local build + artifact contract checks
 │   ├── publish.sh                     # One-click release trigger from the CLI
 │   ├── next-version.mjs               # Computes the next version (year.month.day.serial)
 │   ├── update-version.mjs             # Syncs the version in package.json / package-lock.json
 │   ├── prepend-changelog.mjs          # Prepends a new version block to CHANGELOG.md
-│   └── update-champion-balance.ts     # Scrapes mode balance data from the Fandom LoL Wiki
+│   ├── check-build.mjs                # Artifact contract checks (text-only payload, no shared chunks)
+│   ├── update-champion-balance.ts     # Scrapes mode balance data from the LoL Wiki
+│   └── dev/
+│       ├── dev.sh                     # Dev server (Vite + HMR)
+│       ├── check.sh                   # Type check + build invariants
+│       └── install.sh                 # Dependency install
+├── docs/
+│   ├── auto-update.md                 # Auto update architecture, release flow, security, troubleshooting
+│   └── release.md                     # Release process and versioning rules
 ├── .github/
 │   └── workflows/
 │       ├── publish.yml                # One-click release: version → commit → tag → build & publish
-│       ├── release.yml                # Builds and publishes a Release (tag-triggered / reusable)
+│       ├── release.yml                # Builds Release + dist-v* update artifacts
 │       └── update-balance.yml         # Weekly balance sync with automatic releases
-├── docs/                              # Project documentation
-│   └── release.md                     # Release process and versioning rules
 ├── assets/                            # Static assets (Sona icon)
 ├── markdown/                          # README images
 ├── CHANGELOG.md
@@ -438,8 +452,8 @@ Sona learned a lot from the League client plugin community. Special thanks to:
 >
 > This project does not accept Pull Requests.
 >
-> Feedback, ideas, and bug reports are welcome through [Issues](https://github.com/WJZ-P/sona/issues).
+> Feedback, ideas, and bug reports are welcome through [Issues](https://github.com/gyyst/sona/issues).
 
 ## If Sona helps you, please consider giving the project a star.
 
-[![Stargazers over time](https://starchart.cc/WJZ-P/sona.svg?variant=adaptive)](https://starchart.cc/WJZ-P/sona)
+[![Stargazers over time](https://starchart.cc/gyyst/sona.svg?variant=adaptive)](https://starchart.cc/gyyst/sona)

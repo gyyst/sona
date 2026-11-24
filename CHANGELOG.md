@@ -6,6 +6,27 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新增
+
+- **自动更新** — 插件目录拆分为「冻结引导器 `index.js` + 可更新应用包 `app.js` / `app.css`」。Sona 在后台检查、下载并校验新版本（jsDelivr 主源、raw.githubusercontent 备源），更新页显示「已就绪」后重启客户端即可生效。
+  - ⚠️ **首次升级需手动安装一次**：v1.12.1 及更早版本没有引导器，无法自动更新；请手动下载并覆盖安装一个包含引导器的版本，此后即可自动更新。
+  - 新增「自动更新」设置：`自动检查并下载（推荐）` / `仅提示新版本` / `关闭自动检查`；`Pengu.autoUpdateCheck === false` 时不发起自动检查，手动检查仍可用。
+  - 断网、CDN 不可达、下载超时、SHA-256 不匹配或更新包加载失败时自动回退本地版本，插件仍可正常启动；更新页与设置页展示可操作错误与手动下载入口。
+  - 更新过程只写入 IndexedDB 与 DataStore，不修改 `assets/`，自定义头像、壁纸与设置保持不变。
+- **更新入口状态** — 下载失败、启动回退等可操作错误也会在侧边栏显示「更新失败」入口；常规网络检查失败不占用入口，避免长期打扰。
+- **恢复本地版本** — 远程运行时可在更新页或设置页清除待更新指针与缓存，重启后运行本地安装版本。
+
+### 🔧 构建与发布
+
+- 生产构建改为多入口：`index.js`（冻结引导器）+ `app.js` / `app.css`，并生成 `version.json` / `update.json`；新增构建不变量校验，禁止外部二进制资源与共享 chunk。
+- 发布工作流校验 tag 与 `package.json` 版本一致，并把更新产物发布到 `dist-v<version>` 标签；Release zip 新增 `app.js`、`app.css`、`version.json`、`update.json`。
+- 新增 `scripts/build.sh` / `dev.sh` / `check.sh` / `install.sh` 与 `scripts/check-build.mjs`；构建产物不再提交到仓库根目录。
+- 新增 [`docs/auto-update.md`](docs/auto-update.md)，说明自动更新架构、数据契约、发布流程、安全边界、排障与回滚。
+
+---
+
 ## [1.12.1] - 2026-11-18
 
 ### 🔄 自动更新

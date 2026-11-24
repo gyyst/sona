@@ -32,6 +32,29 @@
   text-shadow: 0 0 8px rgba(200, 170, 110, 0.2);
 }
 
+/* ---- 设置页更新状态 ---- */
+.sona-settings-update-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sona-settings-update-status {
+  margin: 0;
+  max-width: 300px;
+  color: #a09b8c;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+  word-break: break-word;
+}
+
+.sona-settings-update-status--error {
+  color: #e07a5f;
+}
+
 /* ---- 调试页按钮行 ---- */
 .sona-debug-actions {
   display: flex;

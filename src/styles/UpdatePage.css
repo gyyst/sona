@@ -64,6 +64,45 @@
   white-space: pre-wrap;
 }
 
+.sona-update-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 14px;
+  color: #a09b8c;
+  font-size: 12px;
+}
+
+.sona-update-status {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid rgba(200, 170, 110, 0.16);
+  border-radius: 4px;
+  background: rgba(30, 35, 40, 0.42);
+}
+
+.sona-update-status h3 {
+  margin: 0 0 8px;
+  color: #f0e6d2;
+  font-size: 15px;
+}
+
+.sona-update-status p {
+  margin: 0 0 10px;
+  color: #a09b8c;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.sona-update-status .sona-update-error {
+  color: #e07a5f;
+  word-break: break-word;
+}
+
+.sona-update-status .sona-update-hint {
+  color: #c8aa6e;
+}
+
 .sona-update-download h3 {
   margin: 0 0 8px;
   color: #f0e6d2;

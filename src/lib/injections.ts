@@ -18,7 +18,7 @@ import { lcu, LcuEventUri, type LCUEventMessage } from '@/lib/lcu'
 import type { Availability, ChatMe } from '@/lib/lcu'
 import { sleep } from '@/lib/utils'
 import { getPuuid } from '@/lib/assets'
-import { getUpdateState, onUpdateStateChange } from '@/lib/update-checker'
+import { getUpdateState, isUpdateAttentionRequired, onUpdateStateChange } from '@/lib/update/update-checker'
 import {
   decodeSonaStatusPayload,
   embedSonaStatusPayload,
@@ -82,7 +82,7 @@ function createEntryButton(): HTMLElement {
   })
 
   const syncUpdateBadge = () => {
-    btn.classList.toggle('sona-entry-btn--has-update', getUpdateState().status === 'available')
+    btn.classList.toggle('sona-entry-btn--has-update', isUpdateAttentionRequired(getUpdateState()))
   }
   syncUpdateBadge()
   onUpdateStateChange(syncUpdateBadge)
