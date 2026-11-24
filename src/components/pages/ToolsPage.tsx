@@ -153,6 +153,7 @@ export function ToolsPage() {
   const [ltkBridgeEnabled, setLtkBridgeEnabled] = useState(store.get('ltkBridgeEnabled'))
   const [ltkBridgePort, setLtkBridgePort] = useState(String(store.get('ltkBridgePort')))
   const [ltkBridgeToken, setLtkBridgeToken] = useState(store.get('ltkBridgeToken'))
+  const [ltkAutoStart, setLtkAutoStart] = useState(store.get('ltkAutoStart'))
   const [benchNoCooldown, setBenchNoCooldown] = useState(store.get('benchNoCooldown'))
   const [hideTFT, setHideTFT] = useState(store.get('hideTFT'))
   const [hideClassicMode, setHideClassicMode] = useState(store.get('hideClassicMode'))
@@ -333,6 +334,7 @@ export function ToolsPage() {
       store.onChange('ltkBridgeEnabled', setLtkBridgeEnabled),
       store.onChange('ltkBridgePort', (v) => setLtkBridgePort(String(v))),
       store.onChange('ltkBridgeToken', setLtkBridgeToken),
+      store.onChange('ltkAutoStart', setLtkAutoStart),
       store.onChange('benchNoCooldown', setBenchNoCooldown),
       store.onChange('hideTFT', setHideTFT),
       store.onChange('hideClassicMode', setHideClassicMode),
@@ -1015,6 +1017,15 @@ export function ToolsPage() {
               />
             </div>
           </div>
+        </SettingCard>
+        <SettingCard
+          title={t('tools.ltkAutoStart.title')}
+          description={t('tools.ltkAutoStart.description')}
+        >
+          <SonaSwitch
+            checked={ltkAutoStart}
+            onChange={(v) => { setLtkAutoStart(v); store.set('ltkAutoStart', v) }}
+          />
         </SettingCard>
       </SettingGroup>
 

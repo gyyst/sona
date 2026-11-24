@@ -273,6 +273,8 @@ export interface SonaConfig {
   ltkBridgePort: number
   /** ltk-bridge 的认证 token，需与 ltk-bridge/config.json 一致 */
   ltkBridgeToken: string
+  /** 随 Sona 启动时尝试拉起随包分发的 sona-ltk.exe */
+  ltkAutoStart: boolean
 }
 
 
@@ -387,6 +389,7 @@ const DEFAULT_CONFIG: SonaConfig = {
   ltkBridgeEnabled: false,
   ltkBridgePort: 50010,
   ltkBridgeToken: 'sona-local-bridge-v1',
+  ltkAutoStart: true,
 }
 
 

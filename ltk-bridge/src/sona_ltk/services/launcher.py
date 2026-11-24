@@ -96,6 +96,10 @@ def close_ltk_session(session: LtkSession) -> None:
 
 
 def _default_launcher() -> Path:
+  """源码运行使用 ltk-bridge/native/ltf/bin；打包后与 sona-ltk.exe 同目录。"""
+
+  if getattr(sys, "frozen", False):
+    return Path(sys.executable).resolve().parent / LTF_LAUNCHER
   return Path(__file__).resolve().parents[3] / "native" / "ltf" / "bin" / LTF_LAUNCHER
 
 

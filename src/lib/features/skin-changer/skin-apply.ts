@@ -10,7 +10,7 @@
  */
 
 import { lcu } from '@/lib/lcu'
-import { ltkBridgeClient } from './ltk-client'
+import { ltkBridgeClient } from './bridge/ltk-client'
 import { emitSkinSelection, rememberSkinId, setSkinChangerState, type SkinSelectionEventDetail, type SkinSelectionSource } from './state'
 
 export interface ApplySkinOptions {

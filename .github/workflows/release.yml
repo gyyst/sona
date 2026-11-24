@@ -57,22 +57,60 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./ltk-bridge/native/ltf/build.ps1 -Configuration Release
 
-      - name: Package
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install backend dependencies
+        run: uv sync --project ltk-bridge
+
+      - name: Build backend exe
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Compress-Archive -Force -DestinationPath "artifacts/sona-ltf-bridge-${{ env.RELEASE_TAG }}.zip" -Path @(
+          uv run --project ltk-bridge pyinstaller --noconfirm --clean --onefile --windowed `
+            --name sona-ltk --paths ltk-bridge/src `
+            --distpath dist --workpath build/pyinstaller --specpath build `
+            --collect-all pydantic --collect-all pydantic_core `
+            --collect-all websockets --collect-all httpx --collect-all httpcore `
+            --collect-all anyio --collect-all psutil `
+            ltk-bridge/entrypoint.py
+
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $required = @(
             'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
             'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
-            'ltk-bridge/native/ltf/README.md',
-            'ltk-bridge/native/ltf/LICENSE'
+            'dist/sona-ltk.exe'
           )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              throw "缺少构建产物：$file"
+            }
+            $item = Get-Item $file
+            Write-Host "$($item.Name): $($item.Length) bytes"
+          }
+
+      - name: Assemble runtime bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/ltk-runtime | Out-Null
+          Copy-Item ltk-bridge/native/ltf/bin/ltk_launcher.exe artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/native/ltf/bin/LeagueToolFlop.dll artifacts/ltk-runtime/
+          Copy-Item dist/sona-ltk.exe artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/config.example.json artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/start-sona-ltk.bat artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/install-autostart.bat artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/uninstall-autostart.bat artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/README.md artifacts/ltk-runtime/README.md
+          Copy-Item ltk-bridge/native/ltf/LICENSE artifacts/ltk-runtime/LICENSE
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ltf-bridge-release
-          path: artifacts/sona-ltf-bridge-${{ env.RELEASE_TAG }}.zip
+          name: ltk-runtime
+          path: artifacts/ltk-runtime/
           if-no-files-found: error
 
   build-and-release:
@@ -121,11 +159,11 @@ jobs:
           # 补发旧 tag（自动更新引导器之前）时没有该脚本，跳过自动更新契约校验
           if [ -f scripts/check-build.mjs ]; then node scripts/check-build.mjs; fi
 
-      - name: Download LTF bridge artifact
+      - name: Download LTF runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: ltf-bridge-release
-          path: artifacts/ltf
+          name: ltk-runtime
+          path: artifacts/ltk
 
       - name: Prepare release package
         run: |
@@ -137,9 +175,14 @@ jobs:
           else
             cp dist/index.js dist/index.css release/sona/
           fi
-          # 随插件包分发原生 LTF bridge，供本地 ltk-bridge 后台直接使用
+          # 随插件包分发原生 LTF bridge 与可执行后台，供本地直接启动
           mkdir -p release/sona/ltk
-          unzip -o "artifacts/ltf/sona-ltf-bridge-${RELEASE_TAG}.zip" -d release/sona/ltk
+          cp -a artifacts/ltk/. release/sona/ltk/
+          # 独立运行包：解压后即可使用，无需 Python 环境
+          (
+            cd artifacts/ltk
+            zip -r "$GITHUB_WORKSPACE/sona-ltk-runtime-${RELEASE_TAG}.zip" .
+          )
           # 预留用户自定义资源目录，用户可把头像、背景等图片放到这里
           mkdir -p release/sona/assets
           cat > release/sona/assets/README.txt <<'EOF'
@@ -222,6 +265,6 @@ jobs:
           body: ${{ steps.notes.outputs.notes }}
           files: |
             sona-${{ env.RELEASE_TAG }}.zip
-            artifacts/ltf/sona-ltf-bridge-${{ env.RELEASE_TAG }}.zip
+            sona-ltk-runtime-${{ env.RELEASE_TAG }}.zip
           draft: false
           prerelease: false

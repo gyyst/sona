@@ -36,25 +36,55 @@ Windows PowerShell 下可执行：
 uv sync --project ltk-bridge
 ```
 
-### 3. 获取 LTF bridge
+### 3. 获取 LTF bridge 与后台
 
-**方式一：下载 CI 产物（推荐）**
+**方式一：使用 Sona Release（推荐）**
 
-- 在 GitHub Actions → **LTK Bridge** → **Run workflow**，完成后下载 artifact `sona-ltf-bridge`；
-- 或从 Release 页面下载 `sona-ltf-bridge-<tag>.zip`。
-
-解压后把以下文件放到 `ltk-bridge/native/ltf/bin/`：
+Sona 的 Release 包中已经包含完整运行环境：
 
 ```text
-ltk-bridge/native/ltf/bin/LeagueToolFlop.dll
-ltk-bridge/native/ltf/bin/ltk_launcher.exe
+sona/ltk/sona-ltk.exe           # 后台（PyInstaller，无需 Python）
+sona/ltk/ltk_launcher.exe
+sona/ltk/LeagueToolFlop.dll
+sona/ltk/start-sona-ltk.bat
+sona/ltk/install-autostart.bat
+sona/ltk/uninstall-autostart.bat
+sona/ltk/config.example.json
 ```
 
-**方式二：本地构建**
+也可以单独下载 `sona-ltk-runtime-<tag>.zip`。
 
-按 `ltk-bridge/native/ltf/README.md` 操作。
+**方式二：GitHub Actions 产物**
 
-### 4. 配置
+在 Actions → **LTK Bridge** → **Run workflow**，完成后下载 artifact `ltk-runtime`。
+
+**方式三：本地构建**
+
+按 `ltk-bridge/native/ltf/README.md` 操作，并用 uv 运行后台。
+
+## 运行
+
+**随 Sona 包（推荐）**
+
+- 双击 `sona/ltk/install-autostart.bat`：注册开机自启，之后每次登录 Windows 后台自动运行；
+- 或双击 `sona/ltk/start-sona-ltk.bat` 手动启动；
+- 在 Sona 工具页开启「LTK Manager 桥接」，并保持「随 Sona 启动后台」开启。
+
+Sona 插件会尝试在启动时拉起 `ltk/sona-ltk.exe`。Pengu 的官方 API 不保证允许插件启动外部进程；若当前环境不支持，插件会静默跳过，使用上面的启动脚本或开机自启即可。
+
+**源码运行**
+
+```bash
+./scripts/ltk/run.sh
+```
+
+日志输出到：
+
+- `sona/ltk/logs/sona-ltk.log`（打包版）
+- `logs/sona-ltk.log`（源码版）
+- `logs/ltk/ltk_launcher.log`
+
+## 配置
 
 复制示例配置：
 
@@ -69,25 +99,6 @@ Copy-Item ltk-bridge/config.example.json ltk-bridge/config.json
 - `lcuLockfilePath`：国服等无法自动发现 lockfile 时填写；
 - `skinLibraryMode`：`remote` 在线下载，`local` 使用本地皮肤库；
 - `skinLibraryRoot`：本地皮肤库根目录（其下应为 `skins/{championId}/...`）。
-
-## 运行
-
-在项目根目录执行：
-
-```bash
-./scripts/ltk/run.sh
-```
-
-或：
-
-```bash
-uv run --project ltk-bridge python -m sona_ltk
-```
-
-日志输出到：
-
-- `logs/sona-ltk.log`
-- `logs/ltk/ltk_launcher.log`
 
 ## 与 Sona 插件对接
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -57,9 +58,18 @@ class BridgeConfig(BaseModel):
 
 
 def load_config(path: Path | None = None) -> BridgeConfig:
-  """读取 config.json；不存在时返回默认配置。"""
+  """读取 config.json；不存在时返回默认配置。
 
-  config_path = path or Path(__file__).resolve().parents[3] / "config.json"
+  源码运行读取 ltk-bridge/config.json；PyInstaller 打包后读取 exe 旁的 config.json。
+  """
+
+  if path is not None:
+    config_path = path
+  elif getattr(sys, "frozen", False):
+    config_path = Path(sys.executable).resolve().parent / "config.json"
+  else:
+    config_path = Path(__file__).resolve().parents[3] / "config.json"
+
   if not config_path.is_file():
     return BridgeConfig()
   return BridgeConfig.model_validate_json(config_path.read_text(encoding="utf-8"))

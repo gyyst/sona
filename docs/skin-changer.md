@@ -39,8 +39,10 @@ src/lib/features/skin-changer/
 ├── skin-apply.ts    LCU 皮肤选择 + 桥接事件发送
 ├── skin-data.ts     皮肤/炫彩/特殊形态数据加载（game-data + inventory）
 ├── skin-unlock.ts   原生轮播解锁与状态类改写
-├── ltk-client.ts    LTK 后台 WebSocket 客户端
-└── state.ts         类型、瞬时状态与皮肤记忆
+├── state.ts         类型、瞬时状态与皮肤记忆
+└── bridge/
+    ├── ltk-client.ts    LTK 后台 WebSocket 客户端
+    └── ltk-autostart.ts 随 Sona 启动后台的探测与拉起
 ```
 
 UI 位于 `src/components/ui/skin-changer/`，样式位于 `src/styles/SkinChanger.css`。
@@ -72,6 +74,29 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
 
 ### 一次性准备
 
+**使用 Sona Release（推荐）**
+
+Release 包的 `sona/ltk/` 目录已包含：
+
+```text
+sona-ltk.exe               # 后台（无需 Python）
+ltk_launcher.exe
+LeagueToolFlop.dll
+start-sona-ltk.bat
+install-autostart.bat
+uninstall-autostart.bat
+config.example.json
+```
+
+安装 LTK Manager 后：
+
+1. 双击 `install-autostart.bat`（推荐），或每次双击 `start-sona-ltk.bat`；
+2. 在 Sona 工具页开启「LTK Manager 桥接」与「随 Sona 启动后台」。
+
+Sona 插件会尝试在启动时拉起 `ltk/sona-ltk.exe`。Pengu 官方 API 不保证允许插件启动外部进程；若当前环境不支持，插件会静默跳过，使用启动脚本或开机自启即可。
+
+**从源码运行**
+
 1. 安装 [LTK Manager](https://github.com/LeagueToolkit/ltk-manager/releases)。
 2. 构建 LTF bridge（Windows + Visual Studio 2022）：
 
@@ -92,13 +117,19 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
    Copy-Item ltk-bridge/config.example.json ltk-bridge/config.json
    ```
 
-5. 在 Sona 工具页开启「LTK Manager 桥接」，端口与 token 保持默认或与 `config.json` 一致。
+5. 启动：
+
+   ```bash
+   ./scripts/ltk/run.sh
+   ```
 
 ### 启动
 
 ```bash
 ./scripts/ltk/run.sh
 ```
+
+打包版和源码版的日志分别写入 `sona/ltk/logs/` 与项目根 `logs/`。
 
 ### 工作流程
 

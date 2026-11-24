@@ -17,7 +17,7 @@ import { applySkinSelection } from '@/lib/features/skin-changer/skin-apply'
 import {
   ltkBridgeClient,
   type LtkConnectionState,
-} from '@/lib/features/skin-changer/ltk-client'
+} from '@/lib/features/skin-changer/bridge/ltk-client'
 import type { ChampionSkin } from '@/lib/features/skin-changer/state'
 import { SkinGrid } from './SkinGrid'
 import { SkinDetail } from './SkinDetail'

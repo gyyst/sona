@@ -34,12 +34,32 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./ltk-bridge/native/ltf/build.ps1 -Configuration Release
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install backend dependencies
+        run: uv sync --project ltk-bridge
+
+      - name: Build backend exe
+        shell: pwsh
+        run: |
+          uv run --project ltk-bridge pyinstaller --noconfirm --clean --onefile --windowed `
+            --name sona-ltk --paths ltk-bridge/src `
+            --distpath dist --workpath build/pyinstaller --specpath build `
+            --collect-all pydantic --collect-all pydantic_core `
+            --collect-all websockets --collect-all httpx --collect-all httpcore `
+            --collect-all anyio --collect-all psutil `
+            ltk-bridge/entrypoint.py
+
       - name: Verify artifacts
         shell: pwsh
         run: |
           $required = @(
             'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
-            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll'
+            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
+            'dist/sona-ltk.exe'
           )
           foreach ($file in $required) {
             if (-not (Test-Path $file)) {
@@ -49,22 +69,25 @@ jobs:
             Write-Host "$($item.Name): $($item.Length) bytes"
           }
 
-      - name: Package
+      - name: Assemble runtime bundle
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Compress-Archive -Force -DestinationPath artifacts/sona-ltf-bridge.zip -Path @(
-            'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
-            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
-            'ltk-bridge/native/ltf/README.md',
-            'ltk-bridge/native/ltf/LICENSE'
-          )
+          New-Item -ItemType Directory -Force -Path artifacts/ltk-runtime | Out-Null
+          Copy-Item ltk-bridge/native/ltf/bin/ltk_launcher.exe artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/native/ltf/bin/LeagueToolFlop.dll artifacts/ltk-runtime/
+          Copy-Item dist/sona-ltk.exe artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/config.example.json artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/start-sona-ltk.bat artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/install-autostart.bat artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/uninstall-autostart.bat artifacts/ltk-runtime/
+          Copy-Item ltk-bridge/packaging/README.md artifacts/ltk-runtime/README.md
+          Copy-Item ltk-bridge/native/ltf/LICENSE artifacts/ltk-runtime/LICENSE
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sona-ltf-bridge
-          path: artifacts/sona-ltf-bridge.zip
+          name: ltk-runtime
+          path: artifacts/ltk-runtime/
           if-no-files-found: error
           retention-days: 30
 
@@ -84,7 +107,7 @@ jobs:
         run: uv sync --project ltk-bridge
 
       - name: Lint
-        run: uv run --project ltk-bridge ruff check ltk-bridge/src ltk-bridge/tests
+        run: uv run --project ltk-bridge ruff check ltk-bridge/src ltk-bridge/tests ltk-bridge/entrypoint.py
 
       - name: Test
         run: uv run --project ltk-bridge pytest

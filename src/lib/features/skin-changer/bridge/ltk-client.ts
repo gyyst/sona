@@ -10,7 +10,7 @@
  */
 
 import { store } from '@/lib/store'
-import type { SkinSelectionEventDetail } from './state'
+import type { SkinSelectionEventDetail } from '../state'
 
 export type LtkConnectionState =
   | 'disabled'

@@ -49,7 +49,8 @@ import { updateGameModeFilter } from '@/lib/features/game-mode-filter'
 import { updateQuickLobbyMode } from '@/lib/features/quick-lobby-mode'
 import { preloadChampSelectTierBadgeData, updateChampSelectTierBadge } from '@/lib/features/champselect-tier-badge'
 import { updateSkinChanger } from '@/lib/features/skin-changer'
-import { syncLtkBridge } from '@/lib/features/skin-changer/ltk-client'
+import { syncLtkBridge } from '@/lib/features/skin-changer/bridge/ltk-client'
+import { tryAutoStartLtkBackend } from '@/lib/features/skin-changer/bridge/ltk-autostart'
 import { setAvailabilityHijackEnabled, setHideTFTEnabled, setHideClassicModeEnabled, setHideRightNavTextEnabled } from '@/lib/injections'
 import {
   calculateSonaPlayerStrengthScore,
@@ -1382,9 +1383,22 @@ export function initFeatures() {
 
   // LTK Manager 桥接：把皮肤选择发送给本地后台做游戏内注入
   syncLtkBridge()
-  store.onChange('ltkBridgeEnabled', syncLtkBridge)
+  if (store.get('ltkBridgeEnabled') && store.get('ltkAutoStart')) {
+    tryAutoStartLtkBackend()
+  }
+  store.onChange('ltkBridgeEnabled', () => {
+    syncLtkBridge()
+    if (store.get('ltkBridgeEnabled') && store.get('ltkAutoStart')) {
+      tryAutoStartLtkBackend()
+    }
+  })
   store.onChange('ltkBridgePort', syncLtkBridge)
   store.onChange('ltkBridgeToken', syncLtkBridge)
+  store.onChange('ltkAutoStart', (enabled) => {
+    if (enabled && store.get('ltkBridgeEnabled')) {
+      tryAutoStartLtkBackend()
+    }
+  })
 
   // 恢复窗口特效
   const savedEffect = store.get('windowEffect')

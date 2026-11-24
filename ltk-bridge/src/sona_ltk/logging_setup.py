@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -25,11 +26,13 @@ def setup_logging(config: BridgeConfig, project_root: Path) -> None:
   )
   file_handler.setFormatter(formatter)
 
-  console_handler = logging.StreamHandler()
-  console_handler.setFormatter(formatter)
-
   root = logging.getLogger()
   root.setLevel(config.log_level)
   root.handlers.clear()
   root.addHandler(file_handler)
-  root.addHandler(console_handler)
+
+  # PyInstaller --windowed 下没有控制台，stderr 为 None，不能再挂 StreamHandler
+  if sys.stderr is not None:
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root.addHandler(console_handler)
