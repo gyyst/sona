@@ -31,7 +31,8 @@ if (-not $cl) {
 }
 
 $common = @("/nologo", "/std:c++20", "/EHsc", "/MT", "/utf-8", "/W3")
-$optimization = if ($Configuration -eq "Debug") { @("/Od", "/Zi") } else { @("/O2") }
+# 必须始终是数组：单元素字符串在 splatting 时会被 PowerShell 按字符拆开
+$optimization = @(if ($Configuration -eq "Debug") { "/Od"; "/Zi" } else { "/O2" })
 
 Push-Location $PSScriptRoot
 try {

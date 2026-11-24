@@ -119,7 +119,7 @@ def test_unowned_skin_is_applied(manager: tuple[InjectionManager, FakeBridge, Fa
   assert snapshot.status is InjectionStatus.APPLIED
   assert snapshot.patcher_running is True
   assert lcu.forced == [99]
-  assert ("import", "/tmp/fake.zip", bridge.calls[0][2]) in bridge.calls
+  assert ("import", str(Path("/tmp/fake.zip")), bridge.calls[0][2]) in bridge.calls
   assert ("toggle", "m1", True) in bridge.calls
   assert ("start",) in bridge.calls
 
