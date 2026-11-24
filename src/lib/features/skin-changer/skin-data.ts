@@ -257,3 +257,34 @@ async function fetchJson<T>(path: string): Promise<T | null> {
     return null
   }
 }
+
+// ==================== 资产路径索引 ====================
+
+/** 从资源路径提取皮肤资产键：`base` 或 `skin<序号>`（如 `Skins/Skin01/` → `skin1`） */
+export function extractSkinAssetKey(value: string): string | null {
+  const match = value.match(/skins\/(base|skin(\d+))\//i)
+  if (!match) return null
+  return match[2] ? `skin${Number(match[2])}` : 'base'
+}
+
+/**
+ * 构建 资产键 → skinId 列表 索引，用于把轮盘卡片的背景图映射回皮肤。
+ *
+ * 多款皮肤可能共用同一张资源图（例如「至臻 2022」与原始至臻皮肤），
+ * 因此值是有序列表；调用方按卡片在 DOM 中的出现顺序消歧。
+ */
+export function buildSkinAssetIndex(data: ChampionSkinData): Map<string, number[]> {
+  const index = new Map<string, number[]>()
+  for (const skin of data.skins) {
+    const key = extractSkinAssetKey(skin.imagePath)
+    if (!key) continue
+    const ids = index.get(key)
+    if (ids) {
+      if (!ids.includes(skin.id)) ids.push(skin.id)
+    } else {
+      index.set(key, [skin.id])
+    }
+  }
+  for (const ids of index.values()) ids.sort((a, b) => a - b)
+  return index
+}

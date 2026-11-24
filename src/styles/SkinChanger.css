@@ -43,6 +43,16 @@ body[data-sona-skin-unlock] .skin-selection-carousel-container {
   clip-path: inset(-200px -9999px -9999px -9999px) !important;
 }
 
+/* Sona 接管的未拥有皮肤选中态：客户端不会回显未拥有皮肤的选择，由 Sona 维护 */
+body[data-sona-skin-unlock] .skin-selection-item[data-sona-skin-selected='true'] {
+  filter: brightness(1.08) saturate(1.12) !important;
+  -webkit-filter: brightness(1.08) saturate(1.12) !important;
+}
+
+body[data-sona-skin-unlock] .skin-selection-item[data-sona-skin-selected='true'] .skin-selection-thumbnail {
+  box-shadow: 0 0 0 2px #c8aa6e, 0 0 12px rgba(200, 170, 110, 0.45) !important;
+}
+
 /* ---------------- 2. 入口按钮 ---------------- */
 
 .sona-skin-launcher-mount {

@@ -8,7 +8,7 @@
 import { store } from '@/lib/store'
 import { applySkinSelection } from './skin-apply'
 import { loadChampionSkinData } from './skin-data'
-import { getRememberedSkinId, type ChampionSkin, type ChampionSkinData, type SkinRandomScope } from './state'
+import { findSkinBySelectionId, getRememberedSkinId, type ChampionSkin, type ChampionSkinData, type SkinRandomScope } from './state'
 
 interface AutoApplyState {
   championId: number
@@ -63,6 +63,8 @@ export async function maybeAutoApply(
 
   const data = loaded ?? await loadChampionSkinData(championId).catch(() => null)
   if (!data) return
+  // 等待皮肤数据期间用户可能已经手动选择，此时不再覆盖
+  if (state.succeeded || state.championId !== championId) return
 
   if (random) {
     const skin = pickRandomSkin(data.skins, store.get('skinRandomScope'))
@@ -79,7 +81,7 @@ export async function maybeAutoApply(
 
   const skinId = getRememberedSkinId(championId)
   if (!skinId) return
-  const target = findSkinTarget(data.skins, skinId)
+  const target = findSkinBySelectionId(data.skins, skinId)
   const chroma = target?.chromas.find((item) => item.id === skinId)
   state.succeeded = await applySkinSelection({
     championId,
@@ -90,13 +92,6 @@ export async function maybeAutoApply(
     owned: target?.owned,
     source: 'remembered',
   }).catch(() => false)
-}
-
-/** 记忆的 ID 可能是炫彩，需要回溯到所属皮肤 */
-function findSkinTarget(skins: ChampionSkin[], skinId: number): ChampionSkin | null {
-  const direct = skins.find((skin) => skin.id === skinId)
-  if (direct) return direct
-  return skins.find((skin) => skin.chromas.some((chroma) => chroma.id === skinId)) ?? null
 }
 
 /**

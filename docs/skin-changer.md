@@ -2,15 +2,18 @@
 
 Sona 的选人换肤功能参考了 [Rose](https://github.com/Alban1911/Rose) 的客户端插件与注入链路，在英雄选择界面提供皮肤、炫彩与特殊形态的浏览和选择能力，并可通过本地后台把选择交给 LTK Manager，在游戏内替换模型。
 
+选择皮肤的主路径是**客户端原生皮肤轮盘**：Sona 接管未拥有皮肤的点击并自行维护选中态；右下角面板保留给特殊形态、随机皮肤、炫彩与完整浏览等高级能力。
+
 ## 能力边界
 
 | 能力 | 是否支持 | 说明 |
 |------|:--------:|------|
 | 解锁未拥有皮肤的预览 | ✅ | 去灰、去锁标、恢复悬停与点击 |
-| 选择皮肤 / 炫彩 | ✅ | 通过 LCU 写入 `selectedSkinId`，客户端内显示选中 |
+| 选择皮肤 | ✅ | 原生轮盘点击未拥有皮肤即可选择（Sona 接管）；已拥有皮肤走客户端原生逻辑 |
+| 选择炫彩 | ✅ | 通过 Sona 面板选择（轮盘没有独立炫彩入口） |
 | 按英雄记忆上次选择 | ✅ | 存储于 Sona 配置 |
 | 随机皮肤 | ✅ | 可限定「全部皮肤」或「仅已拥有」 |
-| 游戏内模型替换 | ✅（可选） | 需要安装 LTK Manager（可在面板内一键下载安装）、运行 `ltk-bridge`；Release 包已含 LTF bridge 与后台 |
+| 游戏内模型替换 | ✅（可选） | 需要安装 LTK Manager（可在面板内一键下载安装）、运行 `ltk-bridge`（位于 `lib/ltk-bridge`）；Release 包已含 LTF bridge 与后台 |
 | 特殊形态选择 | ⚠️ | 伪形态 ID 仅记录选择；游戏内生效暂未接入 |
 | 派对模式 | ❌ | 不同步给好友，仅本机可见 |
 
@@ -20,8 +23,10 @@ Sona 的选人换肤功能参考了 [Rose](https://github.com/Alban1911/Rose) �
 ## 客户端使用
 
 1. 打开 Sona 面板 → 工具 → 换肤，开启「选人换肤」。
-2. 进入英雄选择，右下角出现「换肤」按钮。
-3. 点击按钮打开面板，点击皮肤卡片或炫彩即可写入选择。
+2. 进入英雄选择后：
+   - **日常选择**：直接点击客户端原生皮肤轮盘上的皮肤卡片（含未拥有皮肤）；
+   - **高级能力**：点击右下角「换肤」按钮打开面板，选择特殊形态、炫彩、随机皮肤或浏览完整列表。
+3. 未拥有皮肤由 Sona 接管点击并写入选择。客户端 16.23 的 LCU 不会回显未拥有皮肤，选中态由 Sona 自行维护；已拥有皮肤仍走客户端原生逻辑。
 
 可选开关：
 
@@ -33,13 +38,14 @@ Sona 的选人换肤功能参考了 [Rose](https://github.com/Alban1911/Rose) �
 
 ```
 src/lib/features/skin-changer/
-├── index.ts         生命周期：phase/session 监听、预览解锁、状态推送
-├── launcher.ts      入口按钮注入（右下角按钮区 / 轮播容器）
-├── auto-apply.ts    记忆与随机的自动应用
-├── skin-apply.ts    LCU 皮肤选择 + 桥接事件发送
-├── skin-data.ts     皮肤/炫彩/特殊形态数据加载（game-data + inventory）
-├── skin-unlock.ts   原生轮播解锁与状态类改写
-├── state.ts         类型、瞬时状态与皮肤记忆
+├── index.ts            生命周期、LCU 基线同步、状态推送
+├── carousel-select.ts  原生轮盘点击接管、skinId 解析、选中态同步
+├── launcher.ts         入口按钮注入（右下角按钮区 / 轮播容器）
+├── auto-apply.ts       记忆与随机的自动应用
+├── skin-apply.ts       LCU 皮肤选择 + 通知（记忆/广播/bridge）
+├── skin-data.ts        皮肤/炫彩/特殊形态数据加载 + 资产键索引
+├── skin-unlock.ts      原生轮播解锁与状态类改写
+├── state.ts            类型、瞬时状态与皮肤记忆
 └── bridge/
     ├── ltk-client.ts    LTK 后台 WebSocket 客户端
     └── ltk-autostart.ts 随 Sona 启动后台的探测与拉起
@@ -58,19 +64,24 @@ UI 位于 `src/components/ui/skin-changer/`，样式位于 `src/styles/SkinChang
 
 炫彩 ID 可直接作为 `selectedSkinId` 提交（与 Rose 的做法一致）。
 
+> **客户端 16.23 限制**：对未拥有皮肤提交 `selectedSkinId` 会返回 204，但 LCU 不回显，
+> 客户端也不会显示选中。因此 Sona 对未拥有皮肤采取「接管轮盘点击 + 自维护选中态」的方式：
+> 选择仍会同步给 LTK bridge（bridge 会先强制切回基础皮肤再注入模型），但客户端 LCU 中的
+> `selectedSkinId` 保持为基础/已拥有皮肤。已拥有皮肤仍由客户端原生逻辑写入 LCU。
+
 ## 游戏内注入（LTK Manager）
 
 ### 组成
 
 ```
-Sona 插件 ──WebSocket──> ltk-bridge（Python）
+Sona 插件 ──WebSocket──> lib/ltk-bridge（Python）
                              │
                              ├─ 皮肤资源下载 / 缓存
                              ├─ LCU phase 监控
                              └─ LTF bridge ──> LTK Manager patcher ──> 游戏
 ```
 
-`ltk-bridge` 位于项目根目录，使用 uv 管理依赖，日志写入 `logs/`。
+`ltk-bridge` 位于 `lib/ltk-bridge`，使用 uv 管理依赖，日志写入 `logs/`。LTK Manager 的上游 fork 位于 `lib/ltk-manager`（git submodule），供后续自建构建使用。
 
 ### 一次性准备
 
@@ -93,7 +104,7 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
 
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass
-   .\ltk-bridge\native\ltf\build.ps1
+   .\lib\ltk-bridge\native\ltf\build.ps1
    ```
 
 3. 安装后台依赖：
@@ -105,7 +116,7 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
 4. 复制并编辑配置：
 
    ```powershell
-   Copy-Item ltk-bridge/config.example.json ltk-bridge/config.json
+   Copy-Item lib/ltk-bridge/config.example.json lib/ltk-bridge/config.json
    ```
 
 5. 启动：
@@ -124,7 +135,7 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
 
 ### 工作流程
 
-1. 客户端选择皮肤/炫彩后，通过 WebSocket 发送 `skin-selection`。
+1. 客户端通过原生轮盘或 Sona 面板选择皮肤/炫彩后，通过 WebSocket 发送 `skin-selection`。
 2. 后台检查 LCU 阶段，只在 `ChampSelect` / `GameStart` / `InProgress` / `Reconnect` 处理。
 3. 已拥有的皮肤直接跳过（客户端自身即可生效）。
 4. 未拥有的皮肤：
@@ -136,18 +147,20 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
 
 ### 资源路径
 
-默认从 `darkseal-org/lol-skins` 下载，路径规则与 Rose 一致：
+默认从 `Alban1911/LeagueSkins`（Rose 维护的资源库）下载，使用数字 ID 目录布局：
 
 ```text
-skins/{championId}/{skinId}/{skinId}.zip
-skins/{championId}/{skinId}/{chromaId}/{chromaId}.zip
+skins/{championId}/{baseSkinId}/{skinId}.fantome
+skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 ```
 
-资源包已 rebase 到基础皮肤路径，运行时不需要重写 WAD。
+后台会依次尝试 `.zip` 与 `.fantome` 两种后缀，因此自定义镜像仍可提供 `.zip` 包。资源包已 rebase 到基础皮肤路径，运行时不需要重写 WAD。
+
+> 旧版本默认的 `darkseal-org/lol-skins` 使用「英雄英文名 / 皮肤名」布局，与后台的目录规则不匹配，会导致下载 404。若 `config.json` 中仍保存该源的默认地址（`master` 或 `main` 分支），加载时会被自动替换为新默认源；自定义镜像地址保持原样。
 
 ### 配置项
 
-见 `ltk-bridge/config.example.json`：
+见 `lib/ltk-bridge/config.example.json`：
 
 | 字段 | 说明 |
 |------|------|
@@ -165,7 +178,7 @@ skins/{championId}/{skinId}/{chromaId}/{chromaId}.zip
 | `lcuLockfilePath` | 无法自动发现 LCU lockfile 时手动指定 |
 | `skinLibraryMode` | `remote` 在线下载 / `local` 本地皮肤库 |
 | `skinLibraryRoot` | 本地皮肤库根目录 |
-| `skinRepositoryBaseUrl` | 远程资源库地址 |
+| `skinRepositoryBaseUrl` | 远程资源库地址，默认 `Alban1911/LeagueSkins`；旧默认地址会自动迁移 |
 
 > 自定义 `ltkManagerVersion` 时，应同时提供对应的 `ltkManagerDownloadUrl`、`ltkManagerSha256` 与 `ltkManagerSize`，否则校验会失败或版本显示不一致。
 

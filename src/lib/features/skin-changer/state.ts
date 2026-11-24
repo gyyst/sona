@@ -172,6 +172,23 @@ export function rememberSkinId(championId: number, skinId: number) {
   })
 }
 
+// ==================== 皮肤查询 ====================
+
+/**
+ * 按皮肤 / 炫彩 ID 查找所属皮肤。
+ *
+ * 选中值可能是皮肤本身，也可能是炫彩；炫彩需要回溯到它所属的皮肤。
+ */
+export function findSkinBySelectionId(
+  skins: readonly ChampionSkin[],
+  selectionId: number,
+): ChampionSkin | null {
+  if (selectionId <= 0) return null
+  const direct = skins.find((skin) => skin.id === selectionId)
+  if (direct) return direct
+  return skins.find((skin) => skin.chromas.some((chroma) => chroma.id === selectionId)) ?? null
+}
+
 // ==================== 事件 ====================
 
 /** 广播皮肤选择事件，供 ltk-bridge 或其他注入器监听 */
