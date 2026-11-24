@@ -27,10 +27,10 @@
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\ltk-bridge\native\ltf\build.ps1
+.\lib\ltk-bridge\native\ltf\build.ps1
 ```
 
-产物位于 `ltk-bridge/native/ltf/bin/`。后台默认从该目录寻找 launcher。
+产物位于 `lib/ltk-bridge/native/ltf/bin/`。后台默认从该目录寻找 launcher。
 
 ## 来源与许可
 

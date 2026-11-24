@@ -13,7 +13,7 @@
   "lcuLockfilePath": "",
   "skinLibraryMode": "remote",
   "skinLibraryRoot": "",
-  "skinRepositoryBaseUrl": "https://raw.githubusercontent.com/darkseal-org/lol-skins/master",
+  "skinRepositoryBaseUrl": "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main",
   "downloadTimeoutS": 120.0,
   "bridgeTimeoutS": 30.0,
   "logLevel": "INFO"

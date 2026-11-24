@@ -7,6 +7,8 @@ Sona 选人换肤的本地搭档进程。它只监听 `127.0.0.1`，负责：
 3. 通过 LTF bridge 导入 LTK Manager、切换 mod、启动 patcher；
 4. 对局结束后停止 patcher、清理本后台导入的 mod。
 
+本目录位于仓库 `lib/ltk-bridge/`，下文命令均从仓库根目录执行。LTK Manager 的上游 fork 位于 `lib/ltk-manager/`（git submodule），供后续自建构建使用。
+
 ## 能力边界
 
 - 第一版支持**普通皮肤与炫彩**；特殊形态资源暂未接入。
@@ -33,7 +35,7 @@ winget install astral-sh.uv
 Windows PowerShell 下可执行：
 
 ```powershell
-uv sync --project ltk-bridge
+uv sync --project lib/ltk-bridge
 ```
 
 ### 3. 获取 LTF bridge 与后台
@@ -60,7 +62,7 @@ sona/ltk/config.example.json
 
 **方式三：本地构建**
 
-按 `ltk-bridge/native/ltf/README.md` 操作，并用 uv 运行后台。
+按 `lib/ltk-bridge/native/ltf/README.md` 操作，并用 uv 运行后台。
 
 ### 4. 安装 LTK Manager
 
@@ -104,7 +106,7 @@ Sona 插件会尝试在启动时拉起 `ltk/sona-ltk.exe`。Pengu 的官方 API 
 复制示例配置：
 
 ```powershell
-Copy-Item ltk-bridge/config.example.json ltk-bridge/config.json
+Copy-Item lib/ltk-bridge/config.example.json lib/ltk-bridge/config.json
 ```
 
 按需修改：
@@ -157,17 +159,19 @@ Copy-Item ltk-bridge/config.example.json ltk-bridge/config.json
 远程资源库默认使用：
 
 ```text
-https://raw.githubusercontent.com/darkseal-org/lol-skins/master
+https://raw.githubusercontent.com/Alban1911/LeagueSkins/main
 ```
 
-路径规则（与 Rose 的 ZipResolver 一致）：
+路径规则（数字 ID 目录，与 Rose 一致）：
 
 ```text
-skins/{championId}/{skinId}/{skinId}.zip
-skins/{championId}/{skinId}/{chromaId}/{chromaId}.zip
+skins/{championId}/{baseSkinId}/{skinId}.fantome
+skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 ```
 
-也支持 `.fantome` 后缀。资源包已由资源库提供方 rebase 到基础皮肤路径，后台不需要在运行时重写 WAD。
+也支持 `.zip` 后缀，后台按 `.zip` → `.fantome` 顺序尝试。资源包已由资源库提供方 rebase 到基础皮肤路径，后台不需要在运行时重写 WAD。
+
+> 旧默认源 `darkseal-org/lol-skins` 的布局与本规则不匹配。若 `config.json` 仍保存旧默认地址，启动时会自动迁移到新默认源；自定义镜像不受影响。
 
 ## 故障排查
 

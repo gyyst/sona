@@ -9,6 +9,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
+DEFAULT_SKIN_REPOSITORY_BASE_URL = "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main"
+
+# 旧默认源布局是 skins/<英雄英文名>/<皮肤名>.zip，与 SkinLibrary 期望的数字目录不匹配，加载时自动迁移。
+LEGACY_SKIN_REPOSITORY_BASE_URLS = frozenset(
+  {
+    "https://raw.githubusercontent.com/darkseal-org/lol-skins/master",
+    "https://raw.githubusercontent.com/darkseal-org/lol-skins/main",
+  },
+)
+
 
 class BridgeConfig(BaseModel):
   """从 config.json 读取；字段使用 camelCase，与示例配置一致。"""
@@ -29,7 +39,7 @@ class BridgeConfig(BaseModel):
   lcu_lockfile_path: Path | None = None
   skin_library_mode: Literal["remote", "local"] = "remote"
   skin_library_root: Path | None = None
-  skin_repository_base_url: str = "https://raw.githubusercontent.com/darkseal-org/lol-skins/master"
+  skin_repository_base_url: str = DEFAULT_SKIN_REPOSITORY_BASE_URL
   download_timeout_s: float = Field(default=120.0, gt=0, le=600)
   bridge_timeout_s: float = Field(default=30.0, gt=0, le=300)
   log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -95,6 +105,8 @@ class BridgeConfig(BaseModel):
     normalized = value.rstrip("/")
     if not normalized.startswith("https://"):
       raise ValueError("skinRepositoryBaseUrl 必须是 https:// 地址")
+    if normalized in LEGACY_SKIN_REPOSITORY_BASE_URLS:
+      return DEFAULT_SKIN_REPOSITORY_BASE_URL
     return normalized
 
   @field_validator("skin_library_root")
@@ -106,7 +118,7 @@ class BridgeConfig(BaseModel):
 def load_config(path: Path | None = None) -> BridgeConfig:
   """读取 config.json；不存在时返回默认配置。
 
-  源码运行读取 ltk-bridge/config.json；PyInstaller 打包后读取 exe 旁的 config.json。
+  源码运行读取 lib/ltk-bridge/config.json；PyInstaller 打包后读取 exe 旁的 config.json。
   """
 
   if path is not None:

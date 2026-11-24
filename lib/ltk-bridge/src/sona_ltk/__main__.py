@@ -21,11 +21,12 @@ class CliOptions:
 
 
 def _project_root() -> Path:
-  """源码运行使用仓库内的 ltk-bridge；PyInstaller 打包后使用 exe 所在目录。"""
+  """源码运行使用仓库根目录（logs/、data/）；PyInstaller 打包后使用 exe 所在目录。"""
 
   if getattr(sys, "frozen", False):
     return Path(sys.executable).resolve().parent
-  return Path(__file__).resolve().parents[3]
+  # lib/ltk-bridge/src/sona_ltk/__main__.py 向上 4 层为仓库根目录
+  return Path(__file__).resolve().parents[4]
 
 
 def _parse_options(argv: list[str]) -> CliOptions:

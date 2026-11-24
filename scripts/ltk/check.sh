@@ -13,4 +13,4 @@ else
   exit 1
 fi
 
-"${UV[@]}" run --project ltk-bridge ruff check ltk-bridge/src ltk-bridge/tests ltk-bridge/entrypoint.py
+"${UV[@]}" run --project lib/ltk-bridge ruff check lib/ltk-bridge/src lib/ltk-bridge/tests lib/ltk-bridge/entrypoint.py

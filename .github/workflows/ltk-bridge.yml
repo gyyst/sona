@@ -7,11 +7,11 @@ on:
       - main
       - 'feat/**'
     paths:
-      - 'ltk-bridge/**'
+      - 'lib/ltk-bridge/**'
       - '.github/workflows/ltk-bridge.yml'
   pull_request:
     paths:
-      - 'ltk-bridge/**'
+      - 'lib/ltk-bridge/**'
       - '.github/workflows/ltk-bridge.yml'
 
 permissions:
@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -32,7 +34,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./ltk-bridge/native/ltf/build.ps1 -Configuration Release
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./lib/ltk-bridge/native/ltf/build.ps1 -Configuration Release
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
@@ -40,18 +42,18 @@ jobs:
           enable-cache: true
 
       - name: Install backend dependencies
-        run: uv sync --project ltk-bridge
+        run: uv sync --project lib/ltk-bridge
 
       - name: Build backend exe
         shell: pwsh
         run: |
-          uv run --project ltk-bridge pyinstaller --noconfirm --clean --onefile --windowed `
-            --name sona-ltk --paths ltk-bridge/src `
+          uv run --project lib/ltk-bridge pyinstaller --noconfirm --clean --onefile --windowed `
+            --name sona-ltk --paths lib/ltk-bridge/src `
             --distpath dist --workpath build/pyinstaller --specpath build `
             --collect-all pydantic --collect-all pydantic_core `
             --collect-all websockets --collect-all httpx --collect-all httpcore `
             --collect-all anyio --collect-all psutil `
-            ltk-bridge/entrypoint.py
+            lib/ltk-bridge/entrypoint.py
 
       - name: Smoke test backend exe
         shell: pwsh
@@ -84,8 +86,8 @@ jobs:
         shell: pwsh
         run: |
           $required = @(
-            'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
-            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
+            'lib/ltk-bridge/native/ltf/bin/ltk_launcher.exe',
+            'lib/ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
             'dist/sona-ltk.exe'
           )
           foreach ($file in $required) {
@@ -100,15 +102,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/ltk-runtime | Out-Null
-          Copy-Item ltk-bridge/native/ltf/bin/ltk_launcher.exe artifacts/ltk-runtime/
-          Copy-Item ltk-bridge/native/ltf/bin/LeagueToolFlop.dll artifacts/ltk-runtime/
+          Copy-Item lib/ltk-bridge/native/ltf/bin/ltk_launcher.exe artifacts/ltk-runtime/
+          Copy-Item lib/ltk-bridge/native/ltf/bin/LeagueToolFlop.dll artifacts/ltk-runtime/
           Copy-Item dist/sona-ltk.exe artifacts/ltk-runtime/
-          Copy-Item ltk-bridge/config.example.json artifacts/ltk-runtime/
-          Copy-Item ltk-bridge/packaging/start-sona-ltk.bat artifacts/ltk-runtime/
-          Copy-Item ltk-bridge/packaging/install-autostart.bat artifacts/ltk-runtime/
-          Copy-Item ltk-bridge/packaging/uninstall-autostart.bat artifacts/ltk-runtime/
-          Copy-Item ltk-bridge/packaging/README.md artifacts/ltk-runtime/README.md
-          Copy-Item ltk-bridge/native/ltf/LICENSE artifacts/ltk-runtime/LICENSE
+          Copy-Item lib/ltk-bridge/config.example.json artifacts/ltk-runtime/
+          Copy-Item lib/ltk-bridge/packaging/start-sona-ltk.bat artifacts/ltk-runtime/
+          Copy-Item lib/ltk-bridge/packaging/install-autostart.bat artifacts/ltk-runtime/
+          Copy-Item lib/ltk-bridge/packaging/uninstall-autostart.bat artifacts/ltk-runtime/
+          Copy-Item lib/ltk-bridge/packaging/README.md artifacts/ltk-runtime/README.md
+          Copy-Item lib/ltk-bridge/native/ltf/LICENSE artifacts/ltk-runtime/LICENSE
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -119,11 +121,13 @@ jobs:
           retention-days: 30
 
   test-python:
-    name: Test ltk-bridge (Windows)
+    name: Test lib/ltk-bridge (Windows)
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
@@ -131,10 +135,10 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --project ltk-bridge
+        run: uv sync --project lib/ltk-bridge
 
       - name: Lint
-        run: uv run --project ltk-bridge ruff check ltk-bridge/src ltk-bridge/tests ltk-bridge/entrypoint.py
+        run: uv run --project lib/ltk-bridge ruff check lib/ltk-bridge/src lib/ltk-bridge/tests lib/ltk-bridge/entrypoint.py
 
       - name: Test
-        run: uv run --project ltk-bridge pytest
+        run: uv run --project lib/ltk-bridge pytest

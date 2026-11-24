@@ -30,6 +30,7 @@ class BridgeService:
   def __init__(self, config: BridgeConfig, project_root: Path) -> None:
     self._config = config
     self._phase = GameflowPhase.NONE
+    self._lcu_ready = False
     self._library = SkinLibrary(config, project_root / "data" / "skins")
     self._lcu = LcuClient(config)
     self._injection = InjectionManager(config, self._library, self._lcu, project_root)
@@ -87,11 +88,27 @@ class BridgeService:
     await self._websocket.broadcast()
 
   async def _poll_phase(self) -> None:
-    await self._refresh_manager_status()
+    try:
+      await self._refresh_manager_status()
+    except Exception:
+      # LTK Manager 探测失败（如 psutil 权限错误）不能跳过或终止本轮 phase 轮询
+      log.exception("LTK Manager 状态刷新异常，继续轮询")
+
     try:
       phase = await asyncio.to_thread(self._lcu.get_phase)
     except LcuUnavailable:
+      if self._lcu_ready:
+        self._lcu_ready = False
+        log.info("LCU 连接已断开，等待客户端恢复")
       return
+    except Exception:
+      # 单次轮询异常不能终止后台循环；LcuUnavailable 已在上方静默处理
+      log.exception("LCU phase 轮询异常，继续重试")
+      return
+
+    if not self._lcu_ready:
+      self._lcu_ready = True
+      log.info("LCU 连接已就绪（phase=%s）", phase)
 
     previous = self._phase
     self._phase = phase

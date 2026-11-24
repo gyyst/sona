@@ -271,7 +271,7 @@ export interface SonaConfig {
   ltkBridgeEnabled: boolean
   /** ltk-bridge 的 WebSocket 端口 */
   ltkBridgePort: number
-  /** ltk-bridge 的认证 token，需与 ltk-bridge/config.json 一致 */
+  /** ltk-bridge 的认证 token，需与 lib/ltk-bridge/config.json 一致 */
   ltkBridgeToken: string
   /** 随 Sona 启动时尝试拉起随包分发的 sona-ltk.exe */
   ltkAutoStart: boolean

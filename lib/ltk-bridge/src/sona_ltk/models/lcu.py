@@ -34,7 +34,8 @@ class GameflowPhase(StrEnum):
 
 class LockfileData(LcuModel):
   name: str
-  pid: int = Field(gt=0)
+  # 进程命令行回退时可能缺少 --app-pid，此时 pid 为 0
+  pid: int = Field(ge=0)
   port: int = Field(gt=0, le=65535)
   password: str
   protocol: str

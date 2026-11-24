@@ -38,16 +38,21 @@ class LibraryMod(BridgeModel):
 
 
 class BridgeError(BridgeModel):
+  """LTK 错误；真实响应可能把具体原因再嵌一层 error。"""
+
   code: str | None = None
   kind: str | None = None
   message: str | None = None
   detail: JsonValue | None = None
+  error: BridgeError | str | None = None
 
 
 class BridgeInner(BridgeModel):
-  """Tauri invoke 的内层响应。"""
+  """Tauri invoke 的内层响应；失败时 ok=false 且带 error。"""
 
+  ok: bool | None = None
   value: JsonValue | None = None
+  error: BridgeError | None = None
 
 
 class InstallValue(BridgeModel):
@@ -75,14 +80,33 @@ class BridgeResponse(BridgeModel):
 
   @property
   def error_text(self) -> str:
-    """把 bridge / LTK 的错误压成一行文本。"""
+    """把 bridge / LTK 的错误压成一行文本。
+
+    提取顺序：顶层 error → response.error（code/kind/message 与嵌套 error 的 kind/message）→ 兜底文案。
+    """
 
     if isinstance(self.error, str):
       return self.error
     if isinstance(self.error, BridgeError):
-      parts = [self.error.code, self.error.kind, self.error.message]
-      return ": ".join(part for part in parts if part) or "LTK bridge error"
+      return ": ".join(_error_parts(self.error)) or "LTK bridge error"
+    inner = self.response.error if self.response is not None else None
+    if isinstance(inner, BridgeError):
+      text = ": ".join(_error_parts(inner))
+      if text:
+        return text
     return "LTK bridge returned ok=false"
+
+
+def _error_parts(error: BridgeError) -> list[str]:
+  """收集错误自身与嵌套 error 的可读字段，忽略空值。"""
+
+  parts: list[str | None] = [error.code, error.kind, error.message]
+  nested = error.error
+  if isinstance(nested, str):
+    parts.append(nested)
+  elif isinstance(nested, BridgeError):
+    parts.extend([nested.code, nested.kind, nested.message])
+  return [part for part in parts if part]
 
 
 def parse_install_value(response: BridgeResponse) -> InstallValue | None:

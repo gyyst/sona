@@ -483,10 +483,12 @@ sona/
 │       ├── dev.sh                     # 开发模式（Vite dev server + HMR）
 │       ├── check.sh                   # 类型检查 + 构建不变量校验
 │       └── install.sh                 # 依赖安装
-├── ltk-bridge/                        # 可选的游戏内换肤后台（Python + uv）
-│   ├── src/sona_ltk/                  # WebSocket / LTF bridge / 资源下载 / 注入状态机
-│   ├── native/ltf/                    # LTF bridge 源码与 Windows 构建脚本
-│   └── config.example.json            # 端口、token、LTK 路径、皮肤库配置
+├── lib/
+│   ├── ltk-bridge/                    # 可选的游戏内换肤后台（Python + uv）
+│   │   ├── src/sona_ltk/              # WebSocket / LTF bridge / 资源下载 / 注入状态机
+│   │   ├── native/ltf/                # LTF bridge 源码与 Windows 构建脚本
+│   │   └── config.example.json        # 端口、token、LTK 路径、皮肤库配置
+│   └── ltk-manager/                   # LTK Manager fork（git submodule）
 ├── docs/
 │   ├── auto-update.md                 # 自动更新架构、发布流程、安全边界与排障
 │   ├── release.md                     # 发布流程与版本号规则

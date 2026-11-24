@@ -13,4 +13,4 @@ else
   exit 1
 fi
 
-"${UV[@]}" run --project ltk-bridge python -m sona_ltk
+"${UV[@]}" run --project lib/ltk-bridge python -m sona_ltk

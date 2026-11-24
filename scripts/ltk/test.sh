@@ -13,4 +13,4 @@ else
   exit 1
 fi
 
-"${UV[@]}" run --project ltk-bridge pytest
+"${UV[@]}" run --project lib/ltk-bridge pytest

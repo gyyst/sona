@@ -130,6 +130,39 @@ def test_bridge_error_text() -> None:
   assert "BUSY" in response.error_text
 
 
+def test_bridge_error_text_reads_nested_response_error() -> None:
+  response = BridgeResponse.model_validate(
+    {
+      "ok": False,
+      "response": {
+        "ok": False,
+        "error": {"code": "PATCHER", "error": {"kind": "LEAGUE_ELEVATED"}},
+      },
+    },
+  )
+  assert response.response is not None
+  assert response.response.error is not None
+  assert response.error_text == "PATCHER: LEAGUE_ELEVATED"
+
+
+def test_bridge_error_text_prefers_top_level_error() -> None:
+  response = BridgeResponse.model_validate(
+    {
+      "ok": False,
+      "error": {"code": "PATCHER", "kind": "TOP_LEVEL"},
+      "response": {
+        "ok": False,
+        "error": {"code": "PATCHER", "error": {"kind": "LEAGUE_ELEVATED"}},
+      },
+    },
+  )
+  assert response.error_text == "PATCHER: TOP_LEVEL"
+
+
+def test_bridge_error_text_falls_back_without_error_payload() -> None:
+  assert BridgeResponse(ok=False).error_text == "LTK bridge returned ok=false"
+
+
 def test_unknown_phase_falls_back_to_none() -> None:
   assert GameflowPhase.from_api("SomethingNew") is GameflowPhase.NONE
   assert GameflowPhase.from_api("ChampSelect") is GameflowPhase.CHAMP_SELECT
@@ -190,6 +223,41 @@ def test_config_rejects_invalid_manager_size() -> None:
 def test_config_rejects_too_small_timeout() -> None:
   with pytest.raises(ValidationError):
     BridgeConfig(ltk_manager_download_timeout_s=5)
+
+
+def test_config_skin_repository_default() -> None:
+  config = BridgeConfig()
+  assert config.skin_repository_base_url == "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main"
+
+
+@pytest.mark.parametrize(
+  "legacy",
+  [
+    "https://raw.githubusercontent.com/darkseal-org/lol-skins/master",
+    "https://raw.githubusercontent.com/darkseal-org/lol-skins/main",
+    "https://raw.githubusercontent.com/darkseal-org/lol-skins/master/",
+  ],
+)
+def test_config_migrates_legacy_skin_repository(legacy: str) -> None:
+  config = BridgeConfig(skin_repository_base_url=legacy)
+  assert config.skin_repository_base_url == "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main"
+
+
+def test_config_migrates_legacy_skin_repository_from_json() -> None:
+  config = BridgeConfig.model_validate_json(
+    '{"skinRepositoryBaseUrl":"https://raw.githubusercontent.com/darkseal-org/lol-skins/main"}',
+  )
+  assert config.skin_repository_base_url == "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main"
+
+
+def test_config_keeps_custom_skin_repository() -> None:
+  config = BridgeConfig(skin_repository_base_url="https://mirror.example.com/LeagueSkins/main/")
+  assert config.skin_repository_base_url == "https://mirror.example.com/LeagueSkins/main"
+
+
+def test_config_rejects_non_https_skin_repository() -> None:
+  with pytest.raises(ValidationError):
+    BridgeConfig(skin_repository_base_url="http://example.com/LeagueSkins")
 
 
 def test_library_mod_coerces_numeric_id() -> None:

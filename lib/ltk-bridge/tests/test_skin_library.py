@@ -125,5 +125,5 @@ def test_remote_mode_uses_cache_and_expected_url(tmp_path: Path, monkeypatch: py
 
   assert archive.path == tmp_path / "cache" / "99" / "99007" / "99007.zip"
   assert requested == [
-    "https://raw.githubusercontent.com/darkseal-org/lol-skins/master/skins/99/99007/99007.zip",
+    "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main/skins/99/99007/99007.zip",
   ]

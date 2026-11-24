@@ -13,4 +13,4 @@ else
   exit 1
 fi
 
-"${UV[@]}" sync --project ltk-bridge
+"${UV[@]}" sync --project lib/ltk-bridge
