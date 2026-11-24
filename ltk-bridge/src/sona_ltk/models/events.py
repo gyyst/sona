@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import Field, TypeAdapter
 
 from .base import ApiModel
+from .ltk_manager import ManagerInstallStatus
 
 
 class AuthMessage(ApiModel):
@@ -31,6 +32,12 @@ class SkinSelection(ApiModel):
   timestamp_ms: int = Field(ge=0)
 
 
+class InstallLtkManager(ApiModel):
+  """请求后台下载并安装 LTK Manager（安装位置由官方安装器决定）。"""
+
+  type: Literal["install-ltk-manager"] = "install-ltk-manager"
+
+
 class ServerStatus(ApiModel):
   """后台 → 客户端的运行状态。"""
 
@@ -40,10 +47,14 @@ class ServerStatus(ApiModel):
   message: str
   skin_name: str | None = None
   patcher_running: bool = False
+  ltk_manager_status: ManagerInstallStatus = ManagerInstallStatus.UNKNOWN
+  ltk_manager_progress: int = Field(default=0, ge=0, le=100)
+  ltk_manager_message: str = ""
+  capabilities: list[str] = Field(default_factory=list)
   timestamp_ms: int = Field(ge=0)
 
 
-type ClientMessage = AuthMessage | SkinSelection
+type ClientMessage = AuthMessage | SkinSelection | InstallLtkManager
 
 _MESSAGE_ADAPTER: TypeAdapter[ClientMessage] = TypeAdapter(
   Annotated[ClientMessage, Field(discriminator="type")],

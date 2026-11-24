@@ -2,6 +2,7 @@
 
 from .bridge_client import BridgeCommandError, BridgeUnavailable, LtkBridge
 from .launcher import LauncherError, LtkSession, ensure_ltk_session
+from .manager import ManagerInstaller, ManagerInstallError, ManagerInstallSnapshot
 from .skin_library import SkinArchive, SkinLibrary, SkinLibraryError
 
 __all__ = [
@@ -10,6 +11,9 @@ __all__ = [
   "LauncherError",
   "LtkBridge",
   "LtkSession",
+  "ManagerInstallError",
+  "ManagerInstallSnapshot",
+  "ManagerInstaller",
   "SkinArchive",
   "SkinLibrary",
   "SkinLibraryError",

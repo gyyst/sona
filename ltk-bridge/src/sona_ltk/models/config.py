@@ -19,6 +19,12 @@ class BridgeConfig(BaseModel):
   auth_token: str = Field(default="sona-local-bridge-v1", min_length=8, max_length=200)
   ltk_launcher_path: Path | None = None
   ltk_manager_path: Path | None = None
+  ltk_manager_version: str | None = None
+  ltk_manager_download_url: str | None = None
+  ltk_manager_sha256: str | None = None
+  ltk_manager_size: int | None = Field(default=None, gt=0, le=500_000_000)
+  ltk_manager_download_timeout_s: float = Field(default=300.0, ge=30, le=3600)
+  ltk_manager_install_timeout_s: float = Field(default=600.0, ge=30, le=3600)
   auto_start_ltk: bool = True
   lcu_lockfile_path: Path | None = None
   skin_library_mode: Literal["remote", "local"] = "remote"
@@ -33,15 +39,55 @@ class BridgeConfig(BaseModel):
     "ltk_manager_path",
     "lcu_lockfile_path",
     "skin_library_root",
+    "ltk_manager_version",
+    "ltk_manager_download_url",
+    "ltk_manager_sha256",
+    "ltk_manager_size",
     mode="before",
   )
   @classmethod
-  def empty_path_to_none(cls, value: object) -> object:
-    """config.example.json 用空字符串表示“自动探测”。"""
+  def empty_str_to_none(cls, value: object) -> object:
+    """config.example.json 用空字符串表示“自动探测”或“使用内置默认值”。"""
 
     if isinstance(value, str) and not value.strip():
       return None
     return value
+
+  @field_validator("ltk_manager_size", mode="before")
+  @classmethod
+  def zero_size_to_none(cls, value: object) -> object:
+    if value == 0:
+      return None
+    return value
+
+  @field_validator("ltk_manager_version")
+  @classmethod
+  def validate_manager_version(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+    parts = value.split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+      raise ValueError("ltkManagerVersion 必须形如 1.33.0")
+    return value
+
+  @field_validator("ltk_manager_download_url")
+  @classmethod
+  def validate_manager_url(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+    if not value.startswith("https://"):
+      raise ValueError("ltkManagerDownloadUrl 必须是 https:// 地址")
+    return value
+
+  @field_validator("ltk_manager_sha256")
+  @classmethod
+  def validate_manager_sha256(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+    cleaned = value.strip().lower()
+    if len(cleaned) != 64 or any(char not in "0123456789abcdef" for char in cleaned):
+      raise ValueError("ltkManagerSha256 必须是 64 位十六进制")
+    return cleaned
 
   @field_validator("skin_repository_base_url")
   @classmethod

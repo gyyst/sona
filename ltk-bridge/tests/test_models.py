@@ -12,8 +12,15 @@ from sona_ltk.models.bridge import (
   parse_install_value,
 )
 from sona_ltk.models.config import BridgeConfig
-from sona_ltk.models.events import AuthMessage, ServerStatus, SkinSelection, parse_client_message
+from sona_ltk.models.events import (
+  AuthMessage,
+  InstallLtkManager,
+  ServerStatus,
+  SkinSelection,
+  parse_client_message,
+)
 from sona_ltk.models.lcu import ChampSelectSession, GameflowPhase
+from sona_ltk.models.ltk_manager import ManagerInstallStatus
 
 
 def test_parse_skin_selection_camel_case() -> None:
@@ -47,6 +54,11 @@ def test_parse_auth() -> None:
   assert message.token == "sona-test-token"
 
 
+def test_parse_install_manager_command() -> None:
+  message = parse_client_message('{"type":"install-ltk-manager"}')
+  assert isinstance(message, InstallLtkManager)
+
+
 def test_server_status_uses_camel_case_aliases() -> None:
   status = ServerStatus(
     phase="ChampSelect",
@@ -54,11 +66,41 @@ def test_server_status_uses_camel_case_aliases() -> None:
     message="ok",
     skin_name="Lux",
     patcher_running=True,
+    ltk_manager_status="not-installed",
+    ltk_manager_progress=42,
+    ltk_manager_message="未检测到 LTK Manager",
+    capabilities=["ltk-manager-install"],
     timestamp_ms=1,
   )
   payload = status.model_dump_json(by_alias=True)
   assert '"injectionStatus":"applied"' in payload
   assert '"patcherRunning":true' in payload
+  assert '"ltkManagerStatus":"not-installed"' in payload
+  assert '"ltkManagerProgress":42' in payload
+  assert '"capabilities":["ltk-manager-install"]' in payload
+
+
+def test_server_status_manager_fields_default() -> None:
+  status = ServerStatus(
+    phase="",
+    injection_status="idle",
+    message="",
+    timestamp_ms=1,
+  )
+  assert status.ltk_manager_status == ManagerInstallStatus.UNKNOWN
+  assert status.ltk_manager_progress == 0
+  assert status.capabilities == []
+
+
+def test_server_status_rejects_unknown_manager_status() -> None:
+  with pytest.raises(ValidationError):
+    ServerStatus(
+      phase="",
+      injection_status="idle",
+      message="",
+      ltk_manager_status="bogus",
+      timestamp_ms=1,
+    )
 
 
 def test_parse_install_value() -> None:
@@ -111,11 +153,43 @@ def test_config_reads_camel_case_json() -> None:
 
 def test_config_empty_paths_become_none() -> None:
   config = BridgeConfig.model_validate_json(
-    '{"ltkLauncherPath":"","ltkManagerPath":"  ","lcuLockfilePath":""}',
+    '{"ltkLauncherPath":"","ltkManagerPath":"  ","lcuLockfilePath":"",'
+    '"ltkManagerVersion":"","ltkManagerDownloadUrl":"","ltkManagerSha256":"","ltkManagerSize":0}',
   )
   assert config.ltk_launcher_path is None
   assert config.ltk_manager_path is None
   assert config.lcu_lockfile_path is None
+  assert config.ltk_manager_version is None
+  assert config.ltk_manager_download_url is None
+  assert config.ltk_manager_sha256 is None
+  assert config.ltk_manager_size is None
+  assert config.ltk_manager_download_timeout_s == 300.0
+  assert config.ltk_manager_install_timeout_s == 600.0
+
+
+def test_config_rejects_invalid_manager_sha() -> None:
+  with pytest.raises(ValidationError):
+    BridgeConfig(ltk_manager_sha256="not-a-hash")
+
+
+def test_config_rejects_non_https_manager_url() -> None:
+  with pytest.raises(ValidationError):
+    BridgeConfig(ltk_manager_download_url="http://example.com/setup.exe")
+
+
+def test_config_rejects_invalid_manager_version() -> None:
+  with pytest.raises(ValidationError):
+    BridgeConfig(ltk_manager_version="v1.33")
+
+
+def test_config_rejects_invalid_manager_size() -> None:
+  with pytest.raises(ValidationError):
+    BridgeConfig(ltk_manager_size=-1)
+
+
+def test_config_rejects_too_small_timeout() -> None:
+  with pytest.raises(ValidationError):
+    BridgeConfig(ltk_manager_download_timeout_s=5)
 
 
 def test_library_mod_coerces_numeric_id() -> None:

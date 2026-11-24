@@ -14,6 +14,10 @@ from sona_ltk.models.events import ServerStatus, SkinSelection
 from sona_ltk.runtime.websocket_server import WebSocketServer
 
 
+async def _noop_install() -> None:
+  pass
+
+
 def _free_port() -> int:
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     sock.bind(("127.0.0.1", 0))
@@ -54,7 +58,7 @@ async def test_authenticates_and_dispatches_selection() -> None:
     received.append(selection)
 
   port = _free_port()
-  server = WebSocketServer(port, "test-token", on_selection, _status)
+  server = WebSocketServer(port, "test-token", on_selection, _status, _noop_install)
   await server.start()
   try:
     async with connect(
@@ -79,7 +83,7 @@ async def test_rejects_wrong_token() -> None:
     raise AssertionError("不应收到未认证消息")
 
   port = _free_port()
-  server = WebSocketServer(port, "test-token", on_selection, _status)
+  server = WebSocketServer(port, "test-token", on_selection, _status, _noop_install)
   await server.start()
   try:
     with pytest.raises(ConnectionClosed):
@@ -96,7 +100,7 @@ async def test_rejects_non_loopback_origin() -> None:
     raise AssertionError("不应收到外部 Origin 消息")
 
   port = _free_port()
-  server = WebSocketServer(port, "test-token", on_selection, _status)
+  server = WebSocketServer(port, "test-token", on_selection, _status, _noop_install)
   await server.start()
   try:
     with pytest.raises((InvalidStatus, ConnectionClosed)):
@@ -104,6 +108,49 @@ async def test_rejects_non_loopback_origin() -> None:
         f"ws://127.0.0.1:{port}",
         additional_headers={"Origin": "https://evil.example.com"},
       ) as websocket:
+        await websocket.recv()
+  finally:
+    await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dispatches_install_command_after_auth() -> None:
+  received = asyncio.Event()
+
+  async def on_selection(selection: SkinSelection) -> None:
+    raise AssertionError("不应收到皮肤选择")
+
+  async def on_install() -> None:
+    received.set()
+
+  port = _free_port()
+  server = WebSocketServer(port, "test-token", on_selection, _status, on_install)
+  await server.start()
+  try:
+    async with connect(f"ws://127.0.0.1:{port}") as websocket:
+      await websocket.send('{"type":"auth","token":"test-token"}')
+      await websocket.recv()
+      await websocket.send('{"type":"install-ltk-manager"}')
+      await asyncio.wait_for(received.wait(), 1)
+  finally:
+    await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_rejects_install_command_before_auth() -> None:
+  async def on_selection(selection: SkinSelection) -> None:
+    raise AssertionError("不应收到皮肤选择")
+
+  async def on_install() -> None:
+    raise AssertionError("未认证时不应触发安装")
+
+  port = _free_port()
+  server = WebSocketServer(port, "test-token", on_selection, _status, on_install)
+  await server.start()
+  try:
+    with pytest.raises((ConnectionClosed, InvalidStatus)):
+      async with connect(f"ws://127.0.0.1:{port}") as websocket:
+        await websocket.send('{"type":"install-ltk-manager"}')
         await websocket.recv()
   finally:
     await server.stop()

@@ -10,7 +10,7 @@ Sona 的选人换肤功能参考了 [Rose](https://github.com/Alban1911/Rose) �
 | 选择皮肤 / 炫彩 | ✅ | 通过 LCU 写入 `selectedSkinId`，客户端内显示选中 |
 | 按英雄记忆上次选择 | ✅ | 存储于 Sona 配置 |
 | 随机皮肤 | ✅ | 可限定「全部皮肤」或「仅已拥有」 |
-| 游戏内模型替换 | ✅（可选） | 需要自行构建 LTF bridge、安装 LTK Manager，并运行 `ltk-bridge` |
+| 游戏内模型替换 | ✅（可选） | 需要安装 LTK Manager（可在面板内一键下载安装）、运行 `ltk-bridge`；Release 包已含 LTF bridge 与后台 |
 | 特殊形态选择 | ⚠️ | 伪形态 ID 仅记录选择；游戏内生效暂未接入 |
 | 派对模式 | ❌ | 不同步给好友，仅本机可见 |
 
@@ -74,28 +74,19 @@ Sona 插件 ──WebSocket──> ltk-bridge（Python）
 
 ### 一次性准备
 
-**使用 Sona Release（推荐）**
+**方式一：在 Sona 面板内一键安装（推荐）**
 
-Release 包的 `sona/ltk/` 目录已包含：
+1. 启动 `sona-ltk` 后台（双击 `sona/ltk/install-autostart.bat`，或每次运行 `start-sona-ltk.bat`）；
+2. 打开 Sona → 工具 → 换肤，开启「LTK Manager 桥接」；
+3. 在「LTK Manager 安装」区域点击「下载并安装 LTK Manager」；
+4. 后台把官方安装包下载到 `sona/ltk/downloads/`，并校验大小与 SHA-256；
+5. Windows 弹出 UAC 时选择「是」；
+6. 官方安装器会把 LTK Manager 安装到 `C:\Program Files\LTK Manager`。这是 LTK Manager 的强制安全策略（ADR-0055）：它的注入组件会在提权后运行，放在用户可写目录会形成本地提权风险，因此**不能安装到插件目录**；
+7. 状态变为「已安装」后即可正常使用，后续无需重复安装。
 
-```text
-sona-ltk.exe               # 后台（无需 Python）
-ltk_launcher.exe
-LeagueToolFlop.dll
-start-sona-ltk.bat
-install-autostart.bat
-uninstall-autostart.bat
-config.example.json
-```
+安装包默认固定为 LTK Manager v1.33.0；版本、下载地址、校验值与文件大小可在 `config.json` 中覆盖（见下方配置项）。LTK Manager 自身的后续升级由官方 updater 负责。
 
-安装 LTK Manager 后：
-
-1. 双击 `install-autostart.bat`（推荐），或每次双击 `start-sona-ltk.bat`；
-2. 在 Sona 工具页开启「LTK Manager 桥接」与「随 Sona 启动后台」。
-
-Sona 插件会尝试在启动时拉起 `ltk/sona-ltk.exe`。Pengu 官方 API 不保证允许插件启动外部进程；若当前环境不支持，插件会静默跳过，使用启动脚本或开机自启即可。
-
-**从源码运行**
+**方式二：手动安装**
 
 1. 安装 [LTK Manager](https://github.com/LeagueToolkit/ltk-manager/releases)。
 2. 构建 LTF bridge（Windows + Visual Studio 2022）：
@@ -164,11 +155,19 @@ skins/{championId}/{skinId}/{chromaId}/{chromaId}.zip
 | `authToken` | 首条消息认证 token |
 | `ltkLauncherPath` | 自定义 `ltk_launcher.exe` 路径 |
 | `ltkManagerPath` | `ltk-manager.exe` 路径，留空自动探测 |
+| `ltkManagerVersion` | 一键安装使用的 LTK Manager 版本，留空使用内置 `1.33.0` |
+| `ltkManagerDownloadUrl` | 安装包下载地址，留空使用官方 Release 地址 |
+| `ltkManagerSha256` | 安装包 SHA-256，留空使用内置校验值 |
+| `ltkManagerSize` | 安装包字节数，留空或 `0` 使用内置值 |
+| `ltkManagerDownloadTimeoutS` | 下载总超时秒数（含重定向与响应头等待），默认 `300` |
+| `ltkManagerInstallTimeoutS` | 安装器等待超时秒数，默认 `600` |
 | `autoStartLtk` | 未发现 bridge 时是否自动启动 LTK Manager |
 | `lcuLockfilePath` | 无法自动发现 LCU lockfile 时手动指定 |
 | `skinLibraryMode` | `remote` 在线下载 / `local` 本地皮肤库 |
 | `skinLibraryRoot` | 本地皮肤库根目录 |
 | `skinRepositoryBaseUrl` | 远程资源库地址 |
+
+> 自定义 `ltkManagerVersion` 时，应同时提供对应的 `ltkManagerDownloadUrl`、`ltkManagerSha256` 与 `ltkManagerSize`，否则校验会失败或版本显示不一致。
 
 ## 客户端 ↔ 后台协议
 
@@ -195,6 +194,12 @@ WebSocket：`ws://127.0.0.1:{port}`，首条消息：
 }
 ```
 
+安装 LTK Manager（由后台下载并调用官方安装器）：
+
+```json
+{"type":"install-ltk-manager"}
+```
+
 后台状态：
 
 ```json
@@ -205,11 +210,18 @@ WebSocket：`ws://127.0.0.1:{port}`，首条消息：
   "message": "游戏内换肤已应用：Elementalist Lux",
   "skinName": "Elementalist Lux",
   "patcherRunning": true,
+  "ltkManagerStatus": "installed",
+  "ltkManagerProgress": 100,
+  "ltkManagerMessage": "LTK Manager 已安装：C:\\Program Files\\LTK Manager\\ltk-manager.exe",
+  "capabilities": ["ltk-manager-install"],
   "timestampMs": 1770000000000
 }
 ```
 
 `injectionStatus`：`idle` / `applying` / `applied` / `skipped-owned` / `error`。
+
+`ltkManagerStatus`：`unknown` / `not-installed` / `downloading` / `verifying` / `installing` / `installed` / `error`。
+`capabilities` 用于客户端判断后台是否支持一键安装；旧后台不返回该字段时客户端隐藏安装入口。
 
 ## 对接其他注入器
 
@@ -236,3 +248,5 @@ interface SkinSelectionEventDetail {
 - 客户端内选择未拥有皮肤不会修改账号数据。
 - 游戏内注入属于第三方修改，存在账号处罚风险，请自行评估。
 - 本功能不提供任何竞技优势。
+- 一键安装的安装包缓存在插件目录（用户可写目录）。后台在调用安装器前会再次校验 SHA-256，但不会校验 Authenticode 签名；若本机已存在与当前用户同权限的恶意进程，仍存在替换安装包的残余风险。请勿在不可信环境中使用。
+- `config.json` 与默认 `authToken` 也位于用户可写位置；默认 token 仅用于本机开发。需要更高隔离时，请把 `config.json` 与 Sona 设置中的端口/token 改为随机值并限制文件权限。

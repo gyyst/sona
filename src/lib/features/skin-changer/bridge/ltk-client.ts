@@ -7,44 +7,20 @@
  * - 断线自动重连（3s / 6s / 12s / 24s / 30s 上限）
  *
  * 仅负责传递选择与展示后台状态；实际的资源下载、LTK 导入与 patcher 由后台完成。
+ * 状态类型与消息解析见 `ltk-status.ts`。
  */
 
 import { store } from '@/lib/store'
 import type { SkinSelectionEventDetail } from '../state'
+import {
+  INITIAL_STATUS,
+  mapInjectionState,
+  parseStatusMessage,
+  sameStrings,
+  type LtkBridgeStatus,
+} from './ltk-status'
 
-export type LtkConnectionState =
-  | 'disabled'
-  | 'connecting'
-  | 'connected'
-  | 'applying'
-  | 'applied'
-  | 'skipped-owned'
-  | 'error'
-
-export interface LtkBridgeStatus {
-  state: LtkConnectionState
-  message: string
-  phase: string
-  skinName: string | null
-  patcherRunning: boolean
-}
-
-interface LtkStatusMessage {
-  type: 'status'
-  phase: string
-  injectionStatus: string
-  message: string
-  skinName: string | null
-  patcherRunning: boolean
-}
-
-const INITIAL_STATUS: LtkBridgeStatus = {
-  state: 'disabled',
-  message: '',
-  phase: '',
-  skinName: null,
-  patcherRunning: false,
-}
+export type { LtkBridgeStatus, LtkConnectionState, LtkManagerInstallState } from './ltk-status'
 
 const RECONNECT_BASE_MS = 3000
 const RECONNECT_MAX_MS = 30000
@@ -79,7 +55,7 @@ class LtkBridgeClient {
     if (!enabled) {
       this.enabled = false
       this.disconnect()
-      this.setStatus({ state: 'disabled', message: '', phase: '', skinName: null, patcherRunning: false })
+      this.setStatus(INITIAL_STATUS)
       return
     }
 
@@ -100,9 +76,18 @@ class LtkBridgeClient {
     this.flushPending()
   }
 
+  /** 请求后台下载并安装 LTK Manager；未连接或未认证时返回 false */
+  installManager(): boolean {
+    if (!this.enabled || !this.authenticated || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      return false
+    }
+    this.socket.send(JSON.stringify({ type: 'install-ltk-manager' }))
+    return true
+  }
+
   private connect() {
     if (!this.enabled || this.socket) return
-    this.setStatus({ state: 'connecting', message: '正在连接 LTK Manager 桥接…', phase: '', skinName: null, patcherRunning: false })
+    this.setStatus({ state: 'connecting', connected: false, message: '正在连接 LTK Manager 桥接…', phase: '', skinName: null, patcherRunning: false })
 
     let socket: WebSocket
     try {
@@ -125,7 +110,7 @@ class LtkBridgeClient {
       this.socket = null
       this.authenticated = false
       if (this.enabled) {
-        this.setStatus({ state: 'error', message: 'LTK Manager 桥接未连接', phase: '', skinName: null, patcherRunning: false })
+        this.setStatus({ state: 'error', connected: false, message: 'LTK Manager 桥接未连接', phase: '', skinName: null, patcherRunning: false })
         this.scheduleReconnect()
       }
     }
@@ -183,20 +168,28 @@ class LtkBridgeClient {
     }
     this.setStatus({
       state: mapInjectionState(message.injectionStatus),
+      connected: true,
       message: message.message,
       phase: message.phase,
       skinName: message.skinName,
       patcherRunning: message.patcherRunning,
+      managerStatus: message.ltkManagerStatus,
+      managerProgress: message.ltkManagerProgress,
+      managerMessage: message.ltkManagerMessage,
+      capabilities: message.capabilities,
     })
   }
 
-  private setStatus(next: LtkBridgeStatus) {
-    const changed = Object.keys(next).some((key) => {
-      const typedKey = key as keyof LtkBridgeStatus
-      return this.status[typedKey] !== next[typedKey]
-    })
+  private setStatus(next: Partial<LtkBridgeStatus>) {
+    const merged: LtkBridgeStatus = { ...this.status, ...next }
+    if (sameStrings(merged.capabilities, this.status.capabilities)) {
+      merged.capabilities = this.status.capabilities
+    }
+    const changed = (Object.keys(merged) as (keyof LtkBridgeStatus)[]).some(
+      (key) => this.status[key] !== merged[key],
+    )
     if (!changed) return
-    this.status = next
+    this.status = merged
     for (const listener of this.listeners) {
       try {
         listener()
@@ -204,45 +197,6 @@ class LtkBridgeClient {
         // ignore
       }
     }
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function parseStatusMessage(raw: unknown): LtkStatusMessage | null {
-  let data: unknown = raw
-  if (typeof raw === 'string') {
-    try {
-      data = JSON.parse(raw)
-    } catch {
-      return null
-    }
-  }
-  if (!isRecord(data) || data.type !== 'status') return null
-  return {
-    type: 'status',
-    phase: typeof data.phase === 'string' ? data.phase : '',
-    injectionStatus: typeof data.injectionStatus === 'string' ? data.injectionStatus : 'idle',
-    message: typeof data.message === 'string' ? data.message : '',
-    skinName: typeof data.skinName === 'string' ? data.skinName : null,
-    patcherRunning: data.patcherRunning === true,
-  }
-}
-
-function mapInjectionState(value: string): LtkConnectionState {
-  switch (value) {
-    case 'applying':
-      return 'applying'
-    case 'applied':
-      return 'applied'
-    case 'skipped-owned':
-      return 'skipped-owned'
-    case 'error':
-      return 'error'
-    default:
-      return 'connected'
   }
 }
 

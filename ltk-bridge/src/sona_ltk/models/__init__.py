@@ -2,8 +2,16 @@
 
 from .bridge import BridgeHello, BridgeInner, BridgeResponse, InstallValue, LibraryMod
 from .config import BridgeConfig, load_config
-from .events import AuthMessage, ClientMessage, ServerStatus, SkinSelection, parse_client_message
+from .events import (
+  AuthMessage,
+  ClientMessage,
+  InstallLtkManager,
+  ServerStatus,
+  SkinSelection,
+  parse_client_message,
+)
 from .lcu import ChampSelectAction, ChampSelectPlayer, ChampSelectSession, GameflowPhase, LockfileData
+from .ltk_manager import ManagerInstallStatus
 
 __all__ = [
   "AuthMessage",
@@ -16,9 +24,11 @@ __all__ = [
   "ChampSelectSession",
   "ClientMessage",
   "GameflowPhase",
+  "InstallLtkManager",
   "InstallValue",
   "LibraryMod",
   "LockfileData",
+  "ManagerInstallStatus",
   "ServerStatus",
   "SkinSelection",
   "load_config",

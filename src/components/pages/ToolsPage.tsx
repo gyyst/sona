@@ -6,6 +6,7 @@ import { SonaSwitch } from '@/components/ui/SonaSwitch'
 import { SonaSelect } from '@/components/ui/SonaSelect'
 import { MatchHistoryModal } from '@/components/ui/MatchHistoryModal'
 import { PlayerNoteEditor } from '@/components/ui/PlayerNoteEditor'
+import { LtkManagerInstall } from '@/components/ui/skin-changer/LtkManagerInstall'
 import { searchChampions, getChampionById, getPlayableQueues, type ChampionInfo } from '@/lib/assets'
 import { PLAYER_NOTE_OBFUSCATED_PREFIX, removePlayerNote, searchPlayerNotes, togglePlayerBlacklist } from '@/lib/player-notes'
 import { lcu, type ChatFriend } from '@/lib/lcu'
@@ -1020,6 +1021,7 @@ export function ToolsPage() {
               </SonaButton>
             </div>
           </div>
+          <LtkManagerInstall />
         </SettingCard>
         <SettingCard
           title={t('tools.ltkAutoStart.title')}

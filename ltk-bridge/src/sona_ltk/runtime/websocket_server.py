@@ -8,10 +8,11 @@ from urllib.parse import urlparse
 from pydantic import ValidationError
 from websockets.asyncio.server import ServerConnection, serve
 
-from ..models.events import AuthMessage, ServerStatus, SkinSelection, parse_client_message
+from ..models.events import AuthMessage, InstallLtkManager, ServerStatus, SkinSelection, parse_client_message
 
 SelectionHandler = Callable[[SkinSelection], Awaitable[None]]
 StatusProvider = Callable[[], ServerStatus]
+CommandHandler = Callable[[], Awaitable[None]]
 
 
 class WebSocketServer:
@@ -23,11 +24,13 @@ class WebSocketServer:
     token: str,
     on_selection: SelectionHandler,
     status_provider: StatusProvider,
+    on_install_manager: CommandHandler,
   ) -> None:
     self._port = port
     self._token = token
     self._on_selection = on_selection
     self._status_provider = status_provider
+    self._on_install_manager = on_install_manager
     self._clients: set[ServerConnection] = set()
     self._server = None
 
@@ -75,6 +78,8 @@ class WebSocketServer:
           continue
         if isinstance(message, SkinSelection):
           await self._on_selection(message)
+        elif isinstance(message, InstallLtkManager):
+          await self._on_install_manager()
     finally:
       self._clients.discard(websocket)
 

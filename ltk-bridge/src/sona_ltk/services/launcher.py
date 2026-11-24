@@ -42,7 +42,7 @@ def ensure_ltk_session(config: BridgeConfig, log_dir: Path) -> LtkSession:
     raise LauncherError("LTK bridge 未运行，且 autoStartLtk=false")
 
   launcher = config.ltk_launcher_path or _default_launcher()
-  manager = config.ltk_manager_path or _find_ltk_manager()
+  manager = config.ltk_manager_path or find_ltk_manager()
   if launcher is None or not launcher.is_file():
     raise LauncherError(f"缺少 {LTF_LAUNCHER}，请先按文档构建 LTF bridge")
   if not (launcher.parent / LTF_BRIDGE_DLL).is_file():
@@ -103,7 +103,8 @@ def _default_launcher() -> Path:
   return Path(__file__).resolve().parents[3] / "native" / "ltf" / "bin" / LTF_LAUNCHER
 
 
-def _find_ltk_manager() -> Path | None:
+def find_ltk_manager() -> Path | None:
+  """自动探测已安装的 LTK Manager；供启动与安装状态检测共用。"""
   configured = os.environ.get("SONA_LTK_MANAGER")
   if configured and Path(configured).is_file():
     return Path(configured)
