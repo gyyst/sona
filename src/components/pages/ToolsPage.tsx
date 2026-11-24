@@ -1015,6 +1015,9 @@ export function ToolsPage() {
                 onChange={(v) => { setLtkBridgeToken(v); store.set('ltkBridgeToken', v) }}
                 placeholder={t('tools.ltkBridge.token')}
               />
+              <SonaButton onClick={() => window.openPluginsFolder()}>
+                {t('tools.ltkBridge.openFolder')}
+              </SonaButton>
             </div>
           </div>
         </SettingCard>

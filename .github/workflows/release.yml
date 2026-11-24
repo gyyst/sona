@@ -76,6 +76,33 @@ jobs:
             --collect-all anyio --collect-all psutil `
             ltk-bridge/entrypoint.py
 
+      - name: Smoke test backend exe
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "dist/sona-ltk.exe" `
+            -ArgumentList @('--port', '50011', '--token', 'smoke-test-token') -PassThru
+          $listening = $false
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $deadline) {
+              Start-Sleep -Seconds 1
+              if (Get-NetTCPConnection -LocalPort 50011 -State Listen -ErrorAction SilentlyContinue) {
+                $listening = $true
+                break
+              }
+              if ($proc.HasExited) { break }
+            }
+            if (-not $listening) {
+              if (Test-Path dist/logs/sona-ltk.log) {
+                Get-Content dist/logs/sona-ltk.log -Tail 40
+              }
+              throw "sona-ltk.exe 未在 30 秒内监听 50011"
+            }
+            Write-Host "sona-ltk.exe smoke test passed"
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+          }
+
       - name: Verify artifacts
         shell: pwsh
         run: |
