@@ -145,6 +145,14 @@ export function ToolsPage() {
   const [unlockStatus, setUnlockStatus] = useState(store.get('unlockStatus'))
   const [unlockAvailability, setUnlockAvailability] = useState(store.get('unlockAvailability'))
   const [unlockChromas, setUnlockChromas] = useState(store.get('unlockChromas'))
+  const [skinChangerEnabled, setSkinChangerEnabled] = useState(store.get('skinChangerEnabled'))
+  const [skinPreviewUnlock, setSkinPreviewUnlock] = useState(store.get('skinPreviewUnlock'))
+  const [skinRememberSelection, setSkinRememberSelection] = useState(store.get('skinRememberSelection'))
+  const [skinRandomPick, setSkinRandomPick] = useState(store.get('skinRandomPick'))
+  const [skinRandomScope, setSkinRandomScope] = useState(store.get('skinRandomScope'))
+  const [ltkBridgeEnabled, setLtkBridgeEnabled] = useState(store.get('ltkBridgeEnabled'))
+  const [ltkBridgePort, setLtkBridgePort] = useState(String(store.get('ltkBridgePort')))
+  const [ltkBridgeToken, setLtkBridgeToken] = useState(store.get('ltkBridgeToken'))
   const [benchNoCooldown, setBenchNoCooldown] = useState(store.get('benchNoCooldown'))
   const [hideTFT, setHideTFT] = useState(store.get('hideTFT'))
   const [hideClassicMode, setHideClassicMode] = useState(store.get('hideClassicMode'))
@@ -317,6 +325,14 @@ export function ToolsPage() {
       store.onChange('unlockStatus', setUnlockStatus),
       store.onChange('unlockAvailability', setUnlockAvailability),
       store.onChange('unlockChromas', setUnlockChromas),
+      store.onChange('skinChangerEnabled', setSkinChangerEnabled),
+      store.onChange('skinPreviewUnlock', setSkinPreviewUnlock),
+      store.onChange('skinRememberSelection', setSkinRememberSelection),
+      store.onChange('skinRandomPick', setSkinRandomPick),
+      store.onChange('skinRandomScope', setSkinRandomScope),
+      store.onChange('ltkBridgeEnabled', setLtkBridgeEnabled),
+      store.onChange('ltkBridgePort', (v) => setLtkBridgePort(String(v))),
+      store.onChange('ltkBridgeToken', setLtkBridgeToken),
       store.onChange('benchNoCooldown', setBenchNoCooldown),
       store.onChange('hideTFT', setHideTFT),
       store.onChange('hideClassicMode', setHideClassicMode),
@@ -901,6 +917,105 @@ export function ToolsPage() {
             />
           </div>
         )}
+      </SettingGroup>
+
+      <SettingGroup title={t('tools.group.skin')}>
+        <SettingCard
+          title={t('tools.skinChanger.title')}
+          description={t('tools.skinChanger.description')}
+        >
+          <SonaSwitch
+            checked={skinChangerEnabled}
+            onChange={(v) => { setSkinChangerEnabled(v); store.set('skinChangerEnabled', v) }}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.skinPreviewUnlock.title')}
+          description={t('tools.skinPreviewUnlock.description')}
+        >
+          <SonaSwitch
+            checked={skinPreviewUnlock}
+            onChange={(v) => { setSkinPreviewUnlock(v); store.set('skinPreviewUnlock', v) }}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.skinRemember.title')}
+          description={t('tools.skinRemember.description')}
+        >
+          <SonaSwitch
+            checked={skinRememberSelection}
+            onChange={(v) => { setSkinRememberSelection(v); store.set('skinRememberSelection', v) }}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.skinRandom.title')}
+          description={t('tools.skinRandom.description')}
+        >
+          <SonaSwitch
+            checked={skinRandomPick}
+            onChange={(v) => { setSkinRandomPick(v); store.set('skinRandomPick', v) }}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.skinRandomScope.title')}
+          description={t('tools.skinRandomScope.description')}
+        >
+          <SonaSelect
+            value={skinRandomScope}
+            onChange={(v) => {
+              const scope = v === 'owned' ? 'owned' : 'all'
+              setSkinRandomScope(scope)
+              store.set('skinRandomScope', scope)
+            }}
+            options={[
+              { value: 'all', label: t('tools.skinRandomScope.all') },
+              { value: 'owned', label: t('tools.skinRandomScope.owned') },
+            ]}
+          />
+        </SettingCard>
+        <SettingCard
+          title={t('tools.skinClearMemory.title')}
+          description={t('tools.skinClearMemory.description')}
+        >
+          <SonaButton
+            onClick={() => {
+              store.set('skinSelections', {})
+              Toast.success(t('tools.skinClearMemory.toast'))
+            }}
+          >
+            {t('tools.skinClearMemory.action')}
+          </SonaButton>
+        </SettingCard>
+        <SettingCard
+          title={t('tools.ltkBridge.title')}
+          description={t('tools.ltkBridge.description')}
+          layout="stacked"
+        >
+          <div className="sona-transfer-owner-controls">
+            <SonaSwitch
+              checked={ltkBridgeEnabled}
+              onChange={(v) => { setLtkBridgeEnabled(v); store.set('ltkBridgeEnabled', v) }}
+            />
+            <div className="sona-ltk-fields">
+              <SonaInput
+                value={ltkBridgePort}
+                onChange={(v) => {
+                  setLtkBridgePort(v)
+                  const port = Number(v)
+                  if (Number.isInteger(port) && port >= 1024 && port <= 65535) {
+                    store.set('ltkBridgePort', port)
+                  }
+                }}
+                placeholder={t('tools.ltkBridge.port')}
+              />
+              <SonaInput
+                value={ltkBridgeToken}
+                onChange={(v) => { setLtkBridgeToken(v); store.set('ltkBridgeToken', v) }}
+                placeholder={t('tools.ltkBridge.token')}
+              />
+            </div>
+          </div>
+        </SettingCard>
       </SettingGroup>
 
       <SettingGroup title={t('tools.group.social')}>

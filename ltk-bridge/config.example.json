@@ -1,0 +1,14 @@
+{
+  "websocketPort": 50010,
+  "authToken": "sona-local-bridge-v1",
+  "ltkLauncherPath": "",
+  "ltkManagerPath": "",
+  "autoStartLtk": true,
+  "lcuLockfilePath": "",
+  "skinLibraryMode": "remote",
+  "skinLibraryRoot": "",
+  "skinRepositoryBaseUrl": "https://raw.githubusercontent.com/darkseal-org/lol-skins/master",
+  "downloadTimeoutS": 120.0,
+  "bridgeTimeoutS": 30.0,
+  "logLevel": "INFO"
+}

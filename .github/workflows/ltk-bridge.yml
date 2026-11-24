@@ -1,0 +1,88 @@
+name: LTK Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ltk-bridge/**'
+      - '.github/workflows/ltk-bridge.yml'
+  pull_request:
+    paths:
+      - 'ltk-bridge/**'
+      - '.github/workflows/ltk-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-native:
+    name: Build LTF bridge (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./ltk-bridge/native/ltf/build.ps1 -Configuration Release
+
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $required = @(
+            'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
+            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll'
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              throw "缺少构建产物：$file"
+            }
+            $item = Get-Item $file
+            Write-Host "$($item.Name): $($item.Length) bytes"
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive -Force -DestinationPath artifacts/sona-ltf-bridge.zip -Path @(
+            'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
+            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
+            'ltk-bridge/native/ltf/README.md',
+            'ltk-bridge/native/ltf/LICENSE'
+          )
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sona-ltf-bridge
+          path: artifacts/sona-ltf-bridge.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  test-python:
+    name: Test ltk-bridge (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --project ltk-bridge
+
+      - name: Lint
+        run: uv run --project ltk-bridge ruff check ltk-bridge/src ltk-bridge/tests
+
+      - name: Test
+        run: uv run --project ltk-bridge pytest

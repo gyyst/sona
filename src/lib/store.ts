@@ -20,6 +20,7 @@
  */
 
 import type { PlayerNote } from '@/lib/player-notes'
+import type { SkinRandomScope } from '@/lib/features/skin-changer/state'
 
 // ==================== 配置项定义 ====================
 
@@ -244,6 +245,24 @@ export interface SonaConfig {
   quickLobbyMode: boolean
   /** 快速大厅模式的目标队列 ID */
   quickLobbyQueueId: number
+  /** 选人换肤面板总开关 */
+  skinChangerEnabled: boolean
+  /** 解锁皮肤轮播预览：未拥有皮肤去灰、去锁、可点击 */
+  skinPreviewUnlock: boolean
+  /** 按英雄记住并自动应用上次选择的皮肤/炫彩 */
+  skinRememberSelection: boolean
+  /** 英雄确定后随机选择一款皮肤 */
+  skinRandomPick: boolean
+  /** 随机皮肤范围：all=全部皮肤，owned=仅已拥有 */
+  skinRandomScope: SkinRandomScope
+  /** 皮肤选择记忆：key 为 championId，value 为皮肤/炫彩 ID */
+  skinSelections: Record<string, number>
+  /** LTK Manager 桥接：把皮肤选择交给本地后台做游戏内注入 */
+  ltkBridgeEnabled: boolean
+  /** ltk-bridge 的 WebSocket 端口 */
+  ltkBridgePort: number
+  /** ltk-bridge 的认证 token，需与 ltk-bridge/config.json 一致 */
+  ltkBridgeToken: string
 }
 
 
@@ -348,6 +367,15 @@ const DEFAULT_CONFIG: SonaConfig = {
   autoTransferOwnerTargetRiotId: '',
   quickLobbyMode: false,
   quickLobbyQueueId: 430,
+  skinChangerEnabled: false,
+  skinPreviewUnlock: true,
+  skinRememberSelection: false,
+  skinRandomPick: false,
+  skinRandomScope: 'all',
+  skinSelections: {},
+  ltkBridgeEnabled: false,
+  ltkBridgePort: 50010,
+  ltkBridgeToken: 'sona-local-bridge-v1',
 }
 
 

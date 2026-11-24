@@ -1,0 +1,37 @@
+[project]
+name = "sona-ltk-bridge"
+version = "0.1.0"
+description = "Sona 选人换肤的本地 LTK Manager 桥接后台"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28,<0.29",
+  "psutil>=6,<7",
+  "pydantic>=2.10,<3",
+  "websockets>=14,<16",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<9",
+  "pytest-asyncio>=0.25,<1",
+  "ruff>=0.9,<1",
+]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# PEP 695 递归类型别名由 Python 3.12+ 提供
+ignore = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore:.*get_event_loop_policy.*:DeprecationWarning",
+  "ignore:.*set_event_loop_policy.*:DeprecationWarning",
+]

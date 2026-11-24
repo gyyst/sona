@@ -9,7 +9,42 @@ permissions:
   contents: write
 
 jobs:
+  build-ltf-bridge:
+    name: Build LTF bridge (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build LTF bridge
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./ltk-bridge/native/ltf/build.ps1 -Configuration Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive -Force -DestinationPath "artifacts/sona-ltf-bridge-${{ github.ref_name }}.zip" -Path @(
+            'ltk-bridge/native/ltf/bin/ltk_launcher.exe',
+            'ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
+            'ltk-bridge/native/ltf/README.md',
+            'ltk-bridge/native/ltf/LICENSE'
+          )
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltf-bridge-release
+          path: artifacts/sona-ltf-bridge-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
   build-and-release:
+    needs: build-ltf-bridge
     runs-on: ubuntu-latest
 
     steps:
@@ -82,11 +117,19 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Download LTF bridge artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ltf-bridge-release
+          path: artifacts/ltf
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Sona ${{ github.ref_name }}
           body: ${{ steps.notes.outputs.notes }}
-          files: sona-${{ github.ref_name }}.zip
+          files: |
+            sona-${{ github.ref_name }}.zip
+            artifacts/ltf/sona-ltf-bridge-${{ github.ref_name }}.zip
           draft: false
           prerelease: false
