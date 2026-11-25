@@ -95,6 +95,8 @@ git push origin v2026.11.24.3
   该版本必须是稳定版（不含 `-rc` 之类后缀），否则构建失败。
 - 构建会移除 `tauri.conf.json` 的 `signCommand`：fork 没有自己的证书，而 `LTK-PATCHER-LICENSE.md`
   要求再分发时必须移除 League Toolkit 的签名。
+- 跨仓库调用可复用工作流时必须写在 **job 级**（`jobs.<id>.uses`），不能写成 `steps[].uses`。
+  写错时整个 workflow 会被判为无效：push 触发的运行 0 秒失败、`total_count` 为 0 个 job。
 - 自动更新默认关闭，避免用户被更新回未打补丁的上游版本。需要启用时，在仓库 Variables 里设置
   `SONA_LTK_UPDATER_ENDPOINT`（指向自有 releases 的 `latest.json`）与 `SONA_LTK_UPDATER_PUBKEY`，
   并另行为该端点发布 `latest.json`。
