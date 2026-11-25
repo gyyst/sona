@@ -167,6 +167,17 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+          # 构建哪一份 fork 代码由子模块 gitlink 锁定，而不是 fork 的 main，
+          # 否则同一次发布可能构建出与所测版本不同的代码。
+          # 必须读 gitlink：子模块未初始化时 `git -C lib/ltk-manager rev-parse HEAD`
+          # 返回的是父仓库 HEAD，那是 sona 的提交，fork 上并不存在。
+          REF=$(git ls-tree HEAD lib/ltk-manager | awk '{print $3}')
+          if [[ ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::无法从子模块 gitlink 读取 fork 提交（得到 '${REF}'）"
+            exit 1
+          fi
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+
   build-ltk-manager:
     name: Build LTK Manager installer (Windows x64)
     needs: resolve-ltk-version
