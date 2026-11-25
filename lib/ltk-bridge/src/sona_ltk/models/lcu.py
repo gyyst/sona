@@ -32,6 +32,15 @@ class GameflowPhase(StrEnum):
       return cls.NONE
 
 
+# 允许启动注入的 LCU 阶段；其余阶段（Lobby / None / PostGame 等）收到迟到选择应中止
+INJECTABLE_PHASES: frozenset[GameflowPhase] = frozenset({
+  GameflowPhase.CHAMP_SELECT,
+  GameflowPhase.GAME_START,
+  GameflowPhase.IN_PROGRESS,
+  GameflowPhase.RECONNECT,
+})
+
+
 class LockfileData(LcuModel):
   name: str
   # 进程命令行回退时可能缺少 --app-pid，此时 pid 为 0

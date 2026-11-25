@@ -11,10 +11,12 @@ from sona_ltk.models.bridge import BridgeError, BridgeInner, BridgeResponse
 from sona_ltk.models.config import BridgeConfig
 from sona_ltk.models.events import SkinSelection
 from sona_ltk.models.lcu import GameflowPhase
+from sona_ltk.runtime import champion_select as champion_select_module
 from sona_ltk.runtime import injection as injection_module
 from sona_ltk.runtime.hints import STAGING_REFUSED_HINT
 from sona_ltk.runtime.injection import InjectionManager, InjectionStatus
 from sona_ltk.services.launcher import LtkSession
+from sona_ltk.services.lcu_client import LcuUnavailable
 from sona_ltk.services.skin_library import SkinArchive
 
 
@@ -74,12 +76,34 @@ class FakeBridge:
     return BridgeResponse(ok=True, response=BridgeInner(value=self.phases[index]))
 
 
+class _FakeChampSelectSession:
+  def __init__(self, locked: bool) -> None:
+    self._locked = locked
+
+  def local_player_locked(self) -> bool:
+    return self._locked
+
+
 class FakeLcu:
-  def __init__(self) -> None:
+  """按顺序返回预设 phase；默认停在 ChampSelect 且本地玩家已锁定。"""
+
+  def __init__(
+    self,
+    phases: list[GameflowPhase] | None = None,
+    locked: bool = True,
+  ) -> None:
+    self.phases = list(phases) if phases is not None else [GameflowPhase.CHAMP_SELECT]
+    self.locked = locked
     self.forced: list[int] = []
+    self.phase_calls = 0
 
   def get_phase(self) -> GameflowPhase:
-    return GameflowPhase.GAME_START
+    phase = self.phases[min(self.phase_calls, len(self.phases) - 1)]
+    self.phase_calls += 1
+    return phase
+
+  def get_champ_select_session(self) -> _FakeChampSelectSession:
+    return _FakeChampSelectSession(self.locked)
 
   def force_base_skin(self, champion_id: int) -> None:
     self.forced.append(champion_id)
@@ -114,11 +138,12 @@ def _build_manager(
   tmp_path: Path,
   bridge: FakeBridge,
   config: BridgeConfig | None = None,
+  lcu: FakeLcu | None = None,
 ) -> InjectionManager:
   session = LtkSession(bridge=bridge, launched_by_us=False, manager_pid=1)
   monkeypatch.setattr(injection_module, "ensure_ltk_session", lambda cfg, log_dir: session)
   monkeypatch.setattr(injection_module, "close_ltk_session", lambda current: None)
-  return InjectionManager(config or BridgeConfig(), FakeLibrary(), FakeLcu(), tmp_path)
+  return InjectionManager(config or BridgeConfig(), FakeLibrary(), lcu or FakeLcu(), tmp_path)
 
 
 @pytest.fixture
@@ -165,7 +190,7 @@ def test_patcher_stays_applying_while_building(
     ],
   )
   instance = _build_manager(monkeypatch, tmp_path, bridge)
-  monkeypatch.setattr(injection_module.time, "sleep", lambda _seconds: None)
+  monkeypatch.setattr(champion_select_module.time, "sleep", lambda _seconds: None)
   observed: list[InjectionStatus] = []
   bridge.on_status = lambda: observed.append(instance.snapshot().status)
 
@@ -216,6 +241,175 @@ def test_chroma_uses_chroma_id(
   instance, _, _, _ = manager
   snapshot = instance.apply(_selection(chroma_id=99991))
   assert snapshot.status is InjectionStatus.APPLIED
+
+
+def test_locked_champ_select_forces_base_skin_once(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  bridge = FakeBridge()
+  lcu = FakeLcu()
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert lcu.forced == [99]
+  assert lcu.phase_calls == 2
+
+
+def test_leaving_champ_select_stops_waiting_without_my_selection(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  """AC-1/AC-2：phase 变成 InProgress 后下一轮立即停止，且不再改写基础皮肤。"""
+
+  bridge = FakeBridge()
+  lcu = FakeLcu(phases=[GameflowPhase.CHAMP_SELECT, GameflowPhase.IN_PROGRESS], locked=False)
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+  monkeypatch.setattr(champion_select_module.time, "sleep", lambda _seconds: None)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert lcu.forced == []
+  # 第一轮 ChampSelect，第二轮 InProgress 即停止，随后确认阶段；不会继续轮询
+  assert lcu.phase_calls == 3
+  assert any(call[0] == "import" for call in bridge.calls)
+  assert ("start",) in bridge.calls
+
+
+@pytest.mark.parametrize(
+  "phase",
+  [GameflowPhase.GAME_START, GameflowPhase.IN_PROGRESS, GameflowPhase.RECONNECT],
+)
+def test_late_selection_skips_rebase_and_keeps_injecting(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+  phase: GameflowPhase,
+) -> None:
+  bridge = FakeBridge()
+  lcu = FakeLcu(phases=[phase])
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert lcu.forced == []
+  assert any(call[0] == "import" for call in bridge.calls)
+  assert ("start",) in bridge.calls
+
+
+@pytest.mark.parametrize(
+  "phase",
+  [GameflowPhase.LOBBY, GameflowPhase.NONE, GameflowPhase.POST_GAME],
+)
+def test_ended_phase_cancels_injection(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+  phase: GameflowPhase,
+) -> None:
+  bridge = FakeBridge()
+  lcu = FakeLcu(phases=[phase])
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.ERROR
+  assert "已取消本次注入" in snapshot.message
+  assert phase.value in snapshot.message
+  assert bridge.calls == []
+  assert lcu.forced == []
+
+
+def test_lock_timeout_skips_base_skin_and_keeps_injecting(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  bridge = FakeBridge()
+  lcu = FakeLcu(locked=False)
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+  monkeypatch.setattr(champion_select_module, "CHAMPION_LOCK_TIMEOUT_S", 0.0)
+  monkeypatch.setattr(champion_select_module.time, "sleep", lambda _seconds: None)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert lcu.forced == []
+  assert ("start",) in bridge.calls
+
+
+class _PhaseRaceLcu(FakeLcu):
+  """检查与 PATCH 之间 phase 已切走：PATCH 返回 404，但注入应继续。"""
+
+  def force_base_skin(self, champion_id: int) -> None:
+    super().force_base_skin(champion_id)
+    self.phases = [GameflowPhase.IN_PROGRESS]
+    raise LcuUnavailable("LCU 请求失败：HTTP 404", status_code=404)
+
+
+def test_phase_race_during_my_selection_is_not_fatal(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  bridge = FakeBridge()
+  lcu = _PhaseRaceLcu()
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+
+  snapshot = instance.apply(_selection())
+
+  assert lcu.forced == [99]  # 只发出一次 PATCH，失败后不重试
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert ("start",) in bridge.calls
+
+
+@pytest.mark.parametrize(
+  ("status_code", "message"),
+  [(None, "LCU 连接失败，客户端可能正在启动或重启"), (500, "LCU 请求失败：HTTP 500")],
+)
+def test_non_404_lcu_failure_is_not_swallowed(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+  status_code: int | None,
+  message: str,
+) -> None:
+  """只有阶段竞态导致的 404 可以降级；连接错误与 5xx 必须暴露为注入失败。"""
+
+  class _FailingLcu(FakeLcu):
+    def force_base_skin(self, champion_id: int) -> None:
+      self.phases = [GameflowPhase.IN_PROGRESS]
+      raise LcuUnavailable(message, status_code=status_code)
+
+  bridge = FakeBridge()
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=_FailingLcu())
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.ERROR
+  assert message in snapshot.message
+  assert bridge.calls == []
+
+
+class _UnreadableLcu(FakeLcu):
+  def get_phase(self) -> GameflowPhase:
+    raise LcuUnavailable("LCU 连接失败，客户端可能正在启动或重启")
+
+
+def test_unreadable_lcu_skips_rebase_and_keeps_injecting(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  """LCU 阶段不可读时保持原行为：跳过等待与基础皮肤改写，继续尝试注入。"""
+
+  bridge = FakeBridge()
+  lcu = _UnreadableLcu()
+  instance = _build_manager(monkeypatch, tmp_path, bridge, lcu=lcu)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert lcu.forced == []
+  assert ("start",) in bridge.calls
 
 
 def test_patcher_failure_cleans_up(

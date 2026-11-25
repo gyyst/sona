@@ -389,6 +389,7 @@ def test_request_translates_http_error_status_without_token(
   with pytest.raises(LcuUnavailable, match="HTTP 500") as excinfo:
     client.get_phase()
 
+  assert excinfo.value.status_code == 500
   assert _TOKEN not in str(excinfo.value)
   # 客户端仍可达，只丢弃本次请求；连接缓存保留
   assert client._lockfile is not None

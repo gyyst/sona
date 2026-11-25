@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..models.config import BridgeConfig
 from ..models.events import ServerStatus, SkinSelection
-from ..models.lcu import GameflowPhase
+from ..models.lcu import INJECTABLE_PHASES, GameflowPhase
 from ..runtime.injection import InjectionManager, InjectionSnapshot, InjectionStatus
 from ..services.lcu_client import LcuClient, LcuUnavailable
 from ..services.manager import ManagerInstaller
@@ -22,6 +22,20 @@ log = logging.getLogger(__name__)
 MANAGER_INSTALL_CAPABILITY = "ltk-manager-install"
 MANAGER_REFRESH_INTERVAL_S = 10.0
 MANAGER_PROGRESS_INTERVAL_S = 0.5
+
+# 相同选择的抑制窗口：失败后的重试必须在窗口外才会再次进入注入状态机
+DUPLICATE_SELECTION_WINDOW_S = 2.0
+_DUPLICATE_INJECTION_STATUSES = frozenset({
+  InjectionStatus.APPLYING,
+  InjectionStatus.APPLIED,
+  InjectionStatus.ERROR,
+})
+
+SelectionKey = tuple[int, int, int | None, int | None]
+
+
+def _selection_key(selection: SkinSelection) -> SelectionKey:
+  return (selection.champion_id, selection.skin_id, selection.chroma_id, selection.form_id)
 
 
 class BridgeService:
@@ -37,6 +51,9 @@ class BridgeService:
     self._manager_installer = ManagerInstaller(config, project_root)
     self._install_task: asyncio.Task[None] | None = None
     self._last_manager_refresh = 0.0
+    self._selection_lock = asyncio.Lock()
+    self._last_selection_key: SelectionKey | None = None
+    self._last_selection_at = 0.0
     self._websocket = WebSocketServer(
       config.websocket_port,
       config.auth_token,
@@ -59,12 +76,19 @@ class BridgeService:
       await self._websocket.stop()
 
   async def handle_selection(self, selection: SkinSelection) -> None:
-    if self._phase not in {
-      GameflowPhase.CHAMP_SELECT,
-      GameflowPhase.GAME_START,
-      GameflowPhase.IN_PROGRESS,
-      GameflowPhase.RECONNECT,
-    }:
+    if self._is_recent_duplicate(selection):
+      log.info("忽略 %s 秒内的重复皮肤选择：%s", DUPLICATE_SELECTION_WINDOW_S, selection.skin_name)
+      return
+
+    # 多个 WebSocket 连接不能并发进入注入状态机；排队后再判定一次重复
+    async with self._selection_lock:
+      if self._is_recent_duplicate(selection):
+        log.info("忽略排队期间变为重复的皮肤选择：%s", selection.skin_name)
+        return
+      await self._apply_selection(selection)
+
+  async def _apply_selection(self, selection: SkinSelection) -> None:
+    if self._phase not in INJECTABLE_PHASES:
       log.info("忽略非选人/游戏阶段的皮肤选择：%s", selection.skin_name)
       await self._websocket.broadcast(
         self._server_status(
@@ -76,6 +100,8 @@ class BridgeService:
       )
       return
 
+    # 记录开始时间：同一选择在 applying 期间的重复消息直接返回
+    self._note_selection(selection)
     await self._websocket.broadcast(
       self._server_status(
         phase=str(self._phase),
@@ -84,8 +110,23 @@ class BridgeService:
         skin_name=selection.skin_name,
       ),
     )
-    await asyncio.to_thread(self._injection.apply, selection)
+    try:
+      await asyncio.to_thread(self._injection.apply, selection)
+    finally:
+      # 完成时间用于计算重复抑制窗口，避免失败后立刻重放同一条选择
+      self._note_selection(selection)
     await self._websocket.broadcast()
+
+  def _note_selection(self, selection: SkinSelection) -> None:
+    self._last_selection_key = _selection_key(selection)
+    self._last_selection_at = time.monotonic()
+
+  def _is_recent_duplicate(self, selection: SkinSelection) -> bool:
+    if self._last_selection_key != _selection_key(selection):
+      return False
+    if time.monotonic() - self._last_selection_at > DUPLICATE_SELECTION_WINDOW_S:
+      return False
+    return self._injection.snapshot().status in _DUPLICATE_INJECTION_STATUSES
 
   async def _poll_phase(self) -> None:
     try:

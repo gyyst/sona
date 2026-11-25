@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
@@ -13,11 +12,16 @@ from pathlib import Path
 from ..models.bridge import BridgeResponse, bridge_error_kind, parse_install_value
 from ..models.config import BridgeConfig
 from ..models.events import SkinSelection
-from ..models.lcu import GameflowPhase
 from ..services.bridge_client import BridgeCommandError, BridgeUnavailable, LtkBridge
 from ..services.launcher import LtkSession, close_ltk_session, ensure_ltk_session
 from ..services.lcu_client import LcuClient
 from ..services.skin_library import SkinLibrary
+from .champion_select import (
+  InjectionCancelled,
+  prepare_base_skin,
+  read_phase,
+  wait_for_champion_locked,
+)
 from .hints import patcher_failure_message
 from .patcher_status import patcher_is_running, wait_for_patcher_ready
 
@@ -106,11 +110,14 @@ class InjectionManager:
         )
         return self._snapshot
 
+      # 先等待英雄锁定并确认阶段，再下载资源/拉起 LTK Manager：
+      # 选人结束后到达的选择不应产生下载或 patcher 副作用
+      wait = wait_for_champion_locked(self._lcu, selection.champion_id)
+      phase = read_phase(self._lcu)
+      prepare_base_skin(self._lcu, selection.champion_id, wait, phase)
+
       archive = self._library.resolve(selection)
       self._ensure_session_locked()
-      # 必须在英雄锁定后强制基础皮肤：未锁定时 LCU 会忽略 my-selection
-      self._wait_for_champion_locked(selection.champion_id)
-      self._lcu.force_base_skin(selection.champion_id)
 
       mod_name = f"Sona_{selection.champion_id}_{selection.skin_id}_{uuid.uuid4().hex[:8]}"
       response = self._bridge.import_skin(str(archive.path), mod_name)
@@ -145,6 +152,17 @@ class InjectionManager:
       )
       log.info("皮肤注入成功 champion=%s skin=%s mod=%s", selection.champion_id, selection.skin_id, mod.id)
       return self._snapshot
+    except InjectionCancelled as exc:
+      log.info("本次注入已取消：%s", exc)
+      # 取消可能发生在清理旧 mod 之后：一并关闭会话，避免为已结束的对局保留 patcher
+      self._cleanup_locked()
+      self._snapshot = InjectionSnapshot(
+        InjectionStatus.ERROR,
+        str(exc),
+        selection.skin_name,
+        selection.champion_id,
+      )
+      return self._snapshot
     except Exception as exc:
       log.exception("皮肤注入失败")
       self._cleanup_locked()
@@ -168,29 +186,6 @@ class InjectionManager:
         return
       close_ltk_session(self._session)
     self._session = ensure_ltk_session(self._config, self._log_dir)
-
-  def _wait_for_champion_locked(self, champion_id: int, timeout_s: float = 90.0) -> None:
-    """选人阶段等待本地玩家锁定英雄；游戏已开始时直接返回。"""
-
-    try:
-      if self._lcu.get_phase() is not GameflowPhase.CHAMP_SELECT:
-        return
-    except Exception:  # noqa: BLE001 - LCU 不可用时继续尝试注入
-      return
-
-    deadline = time.monotonic() + timeout_s
-    logged_error = False
-    while time.monotonic() < deadline:
-      try:
-        session = self._lcu.get_champ_select_session()
-        if session.local_player_locked():
-          return
-      except Exception as exc:  # noqa: BLE001 - 选人会话短暂不可读时继续轮询
-        if not logged_error:
-          log.debug("选人会话暂不可读，继续等待锁定：%s", exc)
-          logged_error = True
-      time.sleep(0.25)
-    log.warning("等待英雄锁定超时，继续尝试注入 champion=%s", champion_id)
 
   def _start_patcher_locked(self) -> None:
     response = self._bridge.start_patcher()

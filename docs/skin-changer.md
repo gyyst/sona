@@ -139,8 +139,9 @@ Sona 插件 ──WebSocket──> lib/ltk-bridge（Python）
 2. 后台检查 LCU 阶段，只在 `ChampSelect` / `GameStart` / `InProgress` / `Reconnect` 处理。
 3. 已拥有的皮肤直接跳过（客户端自身即可生效）。
 4. 未拥有的皮肤：
+   - 等待本地玩家锁定英雄，期间每 0.25 秒检查一次 LCU 阶段；一旦离开 `ChampSelect` 立即停止，不再等满固定超时；
+   - 仅在「`ChampSelect` 且本地玩家已锁定」时通过 LCU 切回基础皮肤（rebase 资源运行在基础皮肤路径）；
    - 按 `championId` / `skinId` / `chromaId` 下载资源包；
-   - 通过 LCU 把客户端切回基础皮肤（rebase 资源运行在基础皮肤路径）；
    - 导入 LTK Manager、启用 mod、启动 patcher，并等待其进入 `patching` 阶段（期间保持 `applying`）。
 5. 对局结束（Lobby / EndGame / PostGame）时停止 patcher、卸载本后台导入的 mod。
 6. 状态通过 WebSocket 回传，面板顶部显示「已连接 / 正在准备注入 / 注入已启动 / 错误」。
@@ -148,11 +149,16 @@ Sona 插件 ──WebSocket──> lib/ltk-bridge（Python）
 > `applied` 表示 patcher 已进入 `patching` 阶段（注入进程已启动），不代表 overlay 已确认附着到游戏。
 > UAC 等待与 overlay 构建期间保持 `applying`。
 
+> **阶段竞态**：选人结束（`GameStart` / `InProgress` / `Reconnect`）后才到达的选择仍会继续资源与 patcher 流程，
+> 但不会再调用 `my-selection`（未锁定或已离开选人时会跳过基础皮肤改写）；
+> `Lobby` / `None` / `PostGame` 等阶段会直接返回「对局阶段已结束」错误，不下载资源、不启动 patcher。
+> 相同英雄/皮肤/炫彩/形态的重复选择在 2 秒内只处理一次，失败后的重试需在窗口外才会再次进入注入状态机。
+
 ### 管理员权限客户端（国服 / WeGame）
 
 WeGame 以管理员权限启动 League 时，注入必须跨越权限边界。当前流程是：
 
-1. 后台先完成资源下载、客户端切回基础皮肤、mod 导入与 overlay 构建；
+1. 后台先完成客户端切回基础皮肤、资源下载、mod 导入与 overlay 构建；
 2. 预检通过后，LTK Manager 才请求 UAC，把它自己的 patcher host（而不是 Manager 本身）提升为管理员；
 3. host 从 `Program Files` 安装目录下的暂存副本加载已验证的 DLL，Manager 始终保持普通权限；
 4. 后台观察到 patcher 进入 `patching` 后才回传 `applied`。

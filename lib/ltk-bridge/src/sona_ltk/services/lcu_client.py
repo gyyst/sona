@@ -30,7 +30,12 @@ _DEFAULT_LOCKFILE_PATHS: tuple[Path, ...] = (
 
 
 class LcuUnavailable(RuntimeError):
-  """LCU 未启动或连接信息不可用。"""
+  """LCU 未启动、连接信息不可用或请求失败。"""
+
+  def __init__(self, message: str, status_code: int | None = None) -> None:
+    super().__init__(message)
+    # HTTP 状态码仅用于区分阶段竞态（404）与其他请求错误；连接层错误保持 None
+    self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -279,7 +284,10 @@ class LcuClient:
         return response.json() if response.content else None
     except httpx.HTTPStatusError as exc:
       # 客户端仍可达，只丢弃本次请求；保留连接缓存供下次复用
-      raise LcuUnavailable(f"LCU 请求失败：HTTP {exc.response.status_code}") from None
+      raise LcuUnavailable(
+        f"LCU 请求失败：HTTP {exc.response.status_code}",
+        status_code=exc.response.status_code,
+      ) from None
     except httpx.TransportError:
       # 客户端启动/重启窗口内端口未监听：清空缓存，下一次请求重新发现
       self._lockfile = None

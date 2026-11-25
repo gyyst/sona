@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 import pytest
 
 from sona_ltk.models.config import BridgeConfig
+from sona_ltk.models.events import ServerStatus, SkinSelection
 from sona_ltk.models.lcu import GameflowPhase
 from sona_ltk.models.ltk_manager import ManagerInstallStatus
-from sona_ltk.runtime.service import BridgeService
+from sona_ltk.runtime.injection import InjectionSnapshot, InjectionStatus
+from sona_ltk.runtime.service import DUPLICATE_SELECTION_WINDOW_S, BridgeService
 from sona_ltk.services.lcu_client import LcuUnavailable
 from sona_ltk.services.manager import installer as installer_module
 from sona_ltk.services.manager.installer import ManagerInstallSnapshot
@@ -33,9 +36,62 @@ class _FakeInstaller:
 class _FakeWebSocket:
   def __init__(self) -> None:
     self.calls = 0
+    self.statuses: list[ServerStatus] = []
 
-  async def broadcast(self) -> None:
+  async def broadcast(self, status: ServerStatus | None = None) -> None:
     self.calls += 1
+    if status is not None:
+      self.statuses.append(status)
+
+
+class _FakeInjection:
+  """记录 apply 调用并统计并发度；apply 在 to_thread 中执行。"""
+
+  def __init__(self) -> None:
+    self.processed: list[SkinSelection] = []
+    self.max_active = 0
+    self._active = 0
+    self._snapshot = InjectionSnapshot(InjectionStatus.IDLE, "等待皮肤选择")
+
+  def apply(self, selection: SkinSelection) -> InjectionSnapshot:
+    self._active += 1
+    self.max_active = max(self.max_active, self._active)
+    try:
+      time.sleep(0.02)
+      self.processed.append(selection)
+      self._snapshot = InjectionSnapshot(InjectionStatus.APPLIED, "已应用", selection.skin_name)
+      return self._snapshot
+    finally:
+      self._active -= 1
+
+  def snapshot(self) -> InjectionSnapshot:
+    return self._snapshot
+
+
+def _selection(skin_id: int = 99007) -> SkinSelection:
+  return SkinSelection(
+    champion_id=99,
+    skin_id=skin_id,
+    base_skin_id=99007,
+    chroma_id=None,
+    form_id=None,
+    skin_name="Elementalist Lux",
+    owned=False,
+    source="manual",
+    timestamp_ms=1,
+  )
+
+
+def _selection_service(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> tuple[BridgeService, _FakeInjection]:
+  service = _service(tmp_path, monkeypatch)
+  service._websocket = _FakeWebSocket()
+  service._phase = GameflowPhase.CHAMP_SELECT
+  injection = _FakeInjection()
+  service._injection = injection  # type: ignore[assignment]
+  return service, injection
 
 
 def _service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BridgeService:
@@ -214,3 +270,91 @@ async def test_poll_phase_tracks_lcu_ready_state(
   await service._poll_phase()
   assert service._lcu_ready is True
   assert stub.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_duplicate_selection_within_window_is_processed_once(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  service, injection = _selection_service(tmp_path, monkeypatch)
+
+  await service.handle_selection(_selection())
+  await service.handle_selection(_selection())
+
+  assert len(injection.processed) == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_selection_retry_is_allowed_after_window(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  service, injection = _selection_service(tmp_path, monkeypatch)
+
+  await service.handle_selection(_selection())
+  service._last_selection_at -= DUPLICATE_SELECTION_WINDOW_S + 1
+  await service.handle_selection(_selection())
+
+  assert len(injection.processed) == 2
+
+
+@pytest.mark.asyncio
+async def test_different_skin_is_not_treated_as_duplicate(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  service, injection = _selection_service(tmp_path, monkeypatch)
+
+  await service.handle_selection(_selection(99007))
+  await service.handle_selection(_selection(99008))
+
+  assert [selection.skin_id for selection in injection.processed] == [99007, 99008]
+
+
+@pytest.mark.asyncio
+async def test_queued_duplicate_selection_is_dropped_after_apply(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """排队期间 duplicate 检查未命中（快照仍为 idle），拿到锁后应再次判定并丢弃。"""
+
+  service, injection = _selection_service(tmp_path, monkeypatch)
+
+  await asyncio.gather(
+    service.handle_selection(_selection()),
+    service.handle_selection(_selection()),
+  )
+
+  assert len(injection.processed) == 1
+  assert injection.max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_selections_are_serialized(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  service, injection = _selection_service(tmp_path, monkeypatch)
+
+  await asyncio.gather(
+    service.handle_selection(_selection(99007)),
+    service.handle_selection(_selection(99008)),
+  )
+
+  assert injection.max_active == 1
+  assert len(injection.processed) == 2
+
+
+@pytest.mark.asyncio
+async def test_selection_outside_injectable_phase_is_rejected(
+  tmp_path: Path,
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  service, injection = _selection_service(tmp_path, monkeypatch)
+  service._phase = GameflowPhase.LOBBY
+
+  await service.handle_selection(_selection())
+
+  assert injection.processed == []
+  assert "已忽略本次选择" in service._websocket.statuses[-1].message
