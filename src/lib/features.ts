@@ -48,9 +48,6 @@ import { updateBeautifyWallpaperMode, updateBeautifyWallpaperModeGlassConfig, up
 import { updateGameModeFilter } from '@/lib/features/game-mode-filter'
 import { updateQuickLobbyMode } from '@/lib/features/quick-lobby-mode'
 import { preloadChampSelectTierBadgeData, updateChampSelectTierBadge } from '@/lib/features/champselect-tier-badge'
-import { updateSkinChanger } from '@/lib/features/skin-changer'
-import { syncLtkBridge } from '@/lib/features/skin-changer/bridge/ltk-client'
-import { tryAutoStartLtkBackend } from '@/lib/features/skin-changer/bridge/ltk-autostart'
 import { setAvailabilityHijackEnabled, setHideTFTEnabled, setHideClassicModeEnabled, setHideRightNavTextEnabled } from '@/lib/injections'
 import {
   calculateSonaPlayerStrengthScore,
@@ -1372,33 +1369,6 @@ export function initFeatures() {
   // 快速大厅模式（点击 Play 直接进目标队列）
   updateQuickLobbyMode(store.get('quickLobbyMode'))
   store.onChange('quickLobbyMode', updateQuickLobbyMode)
-
-  // 选人换肤：皮肤预览解锁、皮肤/炫彩/形态选择、记忆与随机
-  updateSkinChanger()
-  store.onChange('skinChangerEnabled', updateSkinChanger)
-  store.onChange('skinPreviewUnlock', updateSkinChanger)
-  store.onChange('skinRememberSelection', updateSkinChanger)
-  store.onChange('skinRandomPick', updateSkinChanger)
-  store.onChange('skinRandomScope', updateSkinChanger)
-
-  // LTK Manager 桥接：把皮肤选择发送给本地后台做游戏内注入
-  syncLtkBridge()
-  if (store.get('ltkBridgeEnabled') && store.get('ltkAutoStart')) {
-    tryAutoStartLtkBackend()
-  }
-  store.onChange('ltkBridgeEnabled', () => {
-    syncLtkBridge()
-    if (store.get('ltkBridgeEnabled') && store.get('ltkAutoStart')) {
-      tryAutoStartLtkBackend()
-    }
-  })
-  store.onChange('ltkBridgePort', syncLtkBridge)
-  store.onChange('ltkBridgeToken', syncLtkBridge)
-  store.onChange('ltkAutoStart', (enabled) => {
-    if (enabled && store.get('ltkBridgeEnabled')) {
-      tryAutoStartLtkBackend()
-    }
-  })
 
   // 恢复窗口特效
   const savedEffect = store.get('windowEffect')

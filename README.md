@@ -194,20 +194,6 @@
 </details>
 
 <details>
-<summary><b>🪄 换肤</b>（6 项）</summary>
-
-|  | 功能 | 说明 |
-|:---:|------|------|
-| 🪄 | **选人换肤面板** | 在英雄选择界面的皮肤栏注入「换肤」入口，浏览并选择当前英雄的全部皮肤与炫彩（含未拥有）。客户端内立即生效 |
-| 🧩 | **LTK Manager 桥接** | 可选后台把皮肤选择交给 LTK Manager，在游戏内替换模型；原生 bridge、后台 exe 与启动脚本随 Sona 包分发，可随 Sona 启动或开机自启。支持在面板内下载并安装 LTK Manager（官方安装器固定安装到 Program Files）。第三方注入有账号处罚风险 |
-| 🔓 | **皮肤预览解锁** | 移除未拥有皮肤的灰色遮罩、锁标与禁用状态，让皮肤轮播中的全部皮肤可悬停、可点击 |
-| 🎨 | **炫彩选择** | 在面板中直接切换任意炫彩（色板），与皮肤选择联动 |
-| 🧬 | **特殊形态** | 支持元素使拉克丝、DJ 娑娜等多形态皮肤的形态选择；伪形态 ID 仅记录，游戏内生效需外部注入器 |
-| 🎲 | **皮肤记忆与随机** | 按英雄记住上次手动选择的皮肤/炫彩并自动应用；也可每局随机一款皮肤（全部皮肤或仅已拥有） |
-
-</details>
-
-<details>
 <summary><b>🖥️ 界面</b>（8 项）</summary>
 
 |  | 功能 | 说明 |
@@ -478,26 +464,17 @@ sona/
 │   ├── prepend-changelog.mjs          # 向 CHANGELOG.md 插入新版本块
 │   ├── check-build.mjs                # 构建产物契约校验（纯文本负载 / 无共享 chunk）
 │   ├── update-champion-balance.ts     # 从 LoL Wiki 抓取模式平衡数据
-│   ├── ltk/                           # LTK 后台安装 / 运行 / 检查 / 测试
 │   └── dev/
 │       ├── dev.sh                     # 开发模式（Vite dev server + HMR）
 │       ├── check.sh                   # 类型检查 + 构建不变量校验
 │       └── install.sh                 # 依赖安装
-├── lib/
-│   ├── ltk-bridge/                    # 可选的游戏内换肤后台（Python + uv）
-│   │   ├── src/sona_ltk/              # WebSocket / LTF bridge / 资源下载 / 注入状态机
-│   │   ├── native/ltf/                # LTF bridge 源码与 Windows 构建脚本
-│   │   └── config.example.json        # 端口、token、LTK 路径、皮肤库配置
-│   └── ltk-manager/                   # LTK Manager fork（git submodule）
 ├── docs/
 │   ├── auto-update.md                 # 自动更新架构、发布流程、安全边界与排障
-│   ├── release.md                     # 发布流程与版本号规则
-│   └── skin-changer.md                # 换肤与 LTK Manager 注入说明
+│   └── release.md                     # 发布流程与版本号规则
 ├── .github/
 │   └── workflows/
 │       ├── publish.yml                # 一键发布：计算版本 → 提交 → 打 tag → 构建发布
 │       ├── release.yml                # 构建发布 Release 与 dist-v* 自动更新产物
-│       ├── ltk-bridge.yml             # Windows 构建原生 LTF bridge 并测试后台
 │       └── update-balance.yml         # 每周定时同步平衡数据并自动发布新版本
 ├── assets/                            # 静态资源（Sona 头像）
 ├── markdown/                          # README 配图
@@ -529,9 +506,7 @@ sona/
 - [ ] **对局数据看板**（实时数据统计）
 
 <details>
-<summary>已完成（33 项）</summary>
-
-- [x] **选人换肤**（客户端内皮肤/炫彩选择 + 记忆/随机 + 可选 LTK Manager 游戏内注入）
+<summary>已完成（32 项）</summary>
 
 - [x] **自动接受对局**
 - [x] **大乱斗无CD换英雄**

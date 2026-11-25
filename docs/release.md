@@ -73,15 +73,14 @@ git push origin v2026.11.24.3
 `release.yml` 在创建 GitHub Release 的同时发布自动更新产物：
 
 - **前端**：`app.js`、`app.css`、`update.json` 提交到 `dist` 分支，并推送到不可变的 `dist-v<version>` 标签（例如 `dist-v2026.11.24.1`）。客户端自动更新只读取这个标签，不读取 Release 附件。
-- **后台运行时**：`scripts/ltk/runtime-manifest.py` 从 `sona-<tag>.zip` 生成 `ltk.json`（Release zip 与 `sona/ltk/` 下逐文件的大小、SHA-256），随前端产物一起提交到 `dist` 分支。后台 `sona-ltk` 读取 `https://raw.githubusercontent.com/gyyst/sona/dist/ltk.json`，发现本地 `sona/ltk/` 与清单不一致时，从同一 Release 的 `sona-<tag>.zip` 下载并自行替换。
 
 约束：
 
 - `dist-v*` 标签不可变，不要删除或移动；发布事故请用新版本修复。
 - 若 `dist-v*` 标签已推送但 Release 创建失败，直接重跑工作流即可：已存在的标签会被跳过，Release 会被创建/更新，`dist` 分支也会更新。
 - `dist` 分支只保留最新一次产物；重跑旧版本不会把分支回退到更旧的清单。历史前端产物仍在各自的 `dist-v*` 标签中。
-- 大文件（`sona-<tag>.zip`）只作为 Release 附件，不提交到 git 标签；`ltk.json` 只包含哈希与大小，体积很小。
-- 补发自动更新之前的旧 tag（没有 `app.js`）时跳过 `dist` 发布，只创建/更新 GitHub Release；没有 `runtime-manifest.py` 的 tag 不会覆盖 `dist` 上已有的 `ltk.json`。
+- 大文件（`sona-<tag>.zip`）只作为 Release 附件，不提交到 git 标签。
+- 补发自动更新之前的旧 tag（没有 `app.js`）时跳过 `dist` 发布，只创建/更新 GitHub Release。
 
 ## 发布产物
 
@@ -89,31 +88,7 @@ git push origin v2026.11.24.3
 
 | 附件 | 内容 |
 | --- | --- |
-| `sona-<tag>.zip` | 插件本体 + `ltk/` 运行时（LTF 桥接、`sona-ltk.exe`、自维护的 LTK Manager 安装包） |
-
-需要单独部署 `ltk/` 运行时（例如不经插件目录手动启动后台）时，从 `sona-<tag>.zip` 解压出
-`sona/ltk/` 即可，内容与该目录完全一致。
-
-### 自维护的 LTK Manager
-
-`release.yml` 的 `build-ltk-manager` job 从 `lib/ltk-manager` 子模块构建 LTK Manager 的 NSIS 安装包，
-放进插件 zip 的 `ltk/manager/`，并写入 `ltk/manager/manifest.json`（版本、文件名、SHA-256、大小）。
-
-- 后台 `sona-ltk` 优先使用随包安装包，缺失或校验失败时才回退到内置下载地址。
-- 安装包版本取自 `lib/ltk-manager/package.json`，由子模块提交锁定，与 Sona 的日期版本互不影响。
-  该版本必须是稳定版（不含 `-rc` 之类后缀），否则构建失败。
-- 构建会移除 `tauri.conf.json` 的 `signCommand`：fork 没有自己的证书，而 `LTK-PATCHER-LICENSE.md`
-  要求再分发时必须移除 League Toolkit 的签名。
-- 跨仓库调用可复用工作流时必须写在 **job 级**（`jobs.<id>.uses`），不能写成 `steps[].uses`。
-  写错时整个 workflow 会被判为无效：push 触发的运行 0 秒失败、`total_count` 为 0 个 job。
-- 可复用工作流默认检出**调用方**仓库，因此 fork 的构建工作流必须显式
-  `repository: gyyst/ltk-manager` 加 `ref`，否则会在 sona 仓库里跑 `pnpm install` 并失败。
-- 传给 fork 的 `ref` 必须读子模块 gitlink（`git ls-tree HEAD lib/ltk-manager`），
-  不能用 `git -C lib/ltk-manager rev-parse HEAD`：子模块未初始化时它返回父仓库 HEAD，
-  那个提交在 fork 上不存在，checkout 会报 `not our ref`。
-- 自动更新默认关闭，避免用户被更新回未打补丁的上游版本。需要启用时，在仓库 Variables 里设置
-  `SONA_LTK_UPDATER_ENDPOINT`（指向自有 releases 的 `latest.json`）与 `SONA_LTK_UPDATER_PUBKEY`，
-  并另行为该端点发布 `latest.json`。
+| `sona-<tag>.zip` | 插件本体（冻结引导器、应用包、更新清单与自定义资源目录说明） |
 
 ## 相关脚本
 
@@ -122,7 +97,6 @@ git push origin v2026.11.24.3
 | `scripts/next-version.mjs` | 计算下一个版本号（当天最大序号 + 1） |
 | `scripts/update-version.mjs` | 同步 `package.json` 与 `package-lock.json` 的版本号 |
 | `scripts/prepend-changelog.mjs` | 向 `CHANGELOG.md` 顶部插入新版本块 |
-| `scripts/ltk/runtime-manifest.py` | 从 Release zip 生成后台运行时清单 `ltk.json` |
 | `scripts/publish.sh` | 本地一键触发发布工作流 |
 | `scripts/build.sh` | 本地构建插件产物并校验自动更新契约（`--install` 可重新安装依赖） |
 | `scripts/dev/dev.sh` | 本地开发模式（Vite dev server + HMR） |

@@ -35,9 +35,6 @@ dist
 /version.json
 /update.json
 
-# Injected by the release workflow; never committed
-lib/ltk-bridge/src/sona_ltk/_build.py
-
 test/
 .cursor/
 

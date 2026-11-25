@@ -38,213 +38,7 @@ permissions:
   contents: write
 
 jobs:
-  build-ltf-bridge:
-    name: Build LTF bridge (Windows x64)
-    runs-on: windows-latest
-    env:
-      # workflow_call 时 github.ref_name 是调用方分支名，必须优先使用传入的 tag
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-          submodules: recursive
-
-      - name: Inject backend build version
-        shell: pwsh
-        run: |
-          # lib/ltk-bridge 的 tree hash 只在后台源码变化时改变，用于日志与展示，
-          # 是否更新仍以 ltk.json 的逐文件哈希为准。
-          $version = (git rev-parse HEAD:lib/ltk-bridge).Trim()
-          if ($version -notmatch '^[0-9a-f]{40}$') {
-            throw "无法读取 lib/ltk-bridge 提交：$version"
-          }
-          $target = Join-Path $PWD 'lib/ltk-bridge/src/sona_ltk/_build.py'
-          $content = 'BUILD_VERSION = "' + $version + '"' + "`n"
-          [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
-          Write-Host "backend build version: $version"
-
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Build LTF bridge
-        shell: pwsh
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./lib/ltk-bridge/native/ltf/build.ps1 -Configuration Release
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Install backend dependencies
-        run: uv sync --project lib/ltk-bridge
-
-      - name: Build backend exe
-        shell: pwsh
-        run: |
-          uv run --project lib/ltk-bridge pyinstaller --noconfirm --clean --onefile --windowed `
-            --name sona-ltk --paths lib/ltk-bridge/src `
-            --distpath dist --workpath build/pyinstaller --specpath build `
-            --collect-all pydantic --collect-all pydantic_core `
-            --collect-all websockets --collect-all httpx --collect-all httpcore `
-            --collect-all anyio --collect-all psutil `
-            lib/ltk-bridge/entrypoint.py
-
-      - name: Smoke test backend exe
-        shell: pwsh
-        run: |
-          $proc = Start-Process -FilePath "dist/sona-ltk.exe" `
-            -ArgumentList @('--port', '50011', '--token', 'smoke-test-token') -PassThru
-          $listening = $false
-          try {
-            $deadline = (Get-Date).AddSeconds(30)
-            while ((Get-Date) -lt $deadline) {
-              Start-Sleep -Seconds 1
-              if (Get-NetTCPConnection -LocalPort 50011 -State Listen -ErrorAction SilentlyContinue) {
-                $listening = $true
-                break
-              }
-              if ($proc.HasExited) { break }
-            }
-            if (-not $listening) {
-              if (Test-Path dist/logs/sona-ltk.log) {
-                Get-Content dist/logs/sona-ltk.log -Tail 40
-              }
-              throw "sona-ltk.exe 未在 30 秒内监听 50011"
-            }
-            Write-Host "sona-ltk.exe smoke test passed"
-          } finally {
-            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
-          }
-
-      - name: Verify artifacts
-        shell: pwsh
-        run: |
-          $required = @(
-            'lib/ltk-bridge/native/ltf/bin/ltk_launcher.exe',
-            'lib/ltk-bridge/native/ltf/bin/LeagueToolFlop.dll',
-            'dist/sona-ltk.exe'
-          )
-          foreach ($file in $required) {
-            if (-not (Test-Path $file)) {
-              throw "缺少构建产物：$file"
-            }
-            $item = Get-Item $file
-            Write-Host "$($item.Name): $($item.Length) bytes"
-          }
-
-      - name: Assemble runtime bundle
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts/ltk-runtime | Out-Null
-          Copy-Item lib/ltk-bridge/native/ltf/bin/ltk_launcher.exe artifacts/ltk-runtime/
-          Copy-Item lib/ltk-bridge/native/ltf/bin/LeagueToolFlop.dll artifacts/ltk-runtime/
-          Copy-Item dist/sona-ltk.exe artifacts/ltk-runtime/
-          Copy-Item lib/ltk-bridge/config.example.json artifacts/ltk-runtime/
-          Copy-Item lib/ltk-bridge/packaging/start-sona-ltk.bat artifacts/ltk-runtime/
-          Copy-Item lib/ltk-bridge/packaging/install-autostart.bat artifacts/ltk-runtime/
-          Copy-Item lib/ltk-bridge/packaging/uninstall-autostart.bat artifacts/ltk-runtime/
-          Copy-Item lib/ltk-bridge/packaging/README.md artifacts/ltk-runtime/README.md
-          Copy-Item lib/ltk-bridge/native/ltf/LICENSE artifacts/ltk-runtime/LICENSE
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ltk-runtime
-          path: artifacts/ltk-runtime/
-          if-no-files-found: error
-
-  resolve-ltk-version:
-    name: Resolve LTK Manager version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      ref: ${{ steps.version.outputs.ref }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Read the submodule version
-        id: version
-        run: |
-          set -euo pipefail
-          # 安装包版本来自 fork 的 package.json，由 submodule 提交锁定，
-          # 与 Sona 自身的日期版本互不影响。
-          VERSION=$(node -p "require('./lib/ltk-manager/package.json').version")
-          if [[ "$VERSION" == *-* ]]; then
-            echo "::error::lib/ltk-manager 的版本 ${VERSION} 含预发布后缀，安装包版本必须是稳定版"
-            exit 1
-          fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-          # 构建哪一份 fork 代码由子模块 gitlink 锁定，而不是 fork 的 main，
-          # 否则同一次发布可能构建出与所测版本不同的代码。
-          # 必须读 gitlink：子模块未初始化时 `git -C lib/ltk-manager rev-parse HEAD`
-          # 返回的是父仓库 HEAD，那是 sona 的提交，fork 上并不存在。
-          REF=$(git ls-tree HEAD lib/ltk-manager | awk '{print $3}')
-          if [[ ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::无法从子模块 gitlink 读取 fork 提交（得到 '${REF}'）"
-            exit 1
-          fi
-          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
-
-  build-ltk-manager:
-    name: Build LTK Manager installer (Windows x64)
-    needs: resolve-ltk-version
-    permissions:
-      contents: read
-    # 可复用工作流只能在 job 级调用，不能写成 step。
-    uses: gyyst/ltk-manager/.github/workflows/build-for-sona.yml@main
-    with:
-      version: ${{ needs.resolve-ltk-version.outputs.version }}
-      ref: ${{ needs.resolve-ltk-version.outputs.ref }}
-      # 上游端点会把用户更新回未打补丁的版本，因此默认关闭；
-      # 配置 SONA_LTK_UPDATER_ENDPOINT / PUBKEY 后指向自有 releases。
-      updater_endpoint: ${{ vars.SONA_LTK_UPDATER_ENDPOINT }}
-      updater_pubkey: ${{ vars.SONA_LTK_UPDATER_PUBKEY }}
-
-  package-ltk-manager:
-    name: Package LTK Manager installer
-    needs: [resolve-ltk-version, build-ltk-manager]
-    runs-on: windows-latest
-    steps:
-      - name: Download installer
-        uses: actions/download-artifact@v4
-        with:
-          name: ltk-manager-installer
-          path: artifacts/manager
-
-      - name: Write bundled manager manifest
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.resolve-ltk-version.outputs.version }}
-        run: |
-          $file = Get-ChildItem -Path artifacts/manager -Filter "*-setup.exe" | Select-Object -First 1
-          if (-not $file) { throw "未找到 LTK Manager 安装包" }
-          $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
-          $manifest = [ordered]@{
-            version = $env:VERSION
-            file = $file.Name
-            sha256 = $hash
-            size = $file.Length
-          }
-          $manifest | ConvertTo-Json | Set-Content -Path artifacts/manager/manifest.json -Encoding utf8
-          Write-Host "$($file.Name) sha256=$hash size=$($file.Length)"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ltk-manager
-          path: artifacts/manager/
-          if-no-files-found: error
-
   build-and-release:
-    needs: [build-ltf-bridge, package-ltk-manager]
     runs-on: ubuntu-latest
 
     env:
@@ -256,7 +50,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -290,18 +83,6 @@ jobs:
           # 补发旧 tag（自动更新引导器之前）时没有该脚本，跳过自动更新契约校验
           if [ -f scripts/check-build.mjs ]; then node scripts/check-build.mjs; fi
 
-      - name: Download LTF runtime artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ltk-runtime
-          path: artifacts/ltk
-
-      - name: Download LTK Manager artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ltk-manager
-          path: artifacts/manager
-
       - name: Prepare release package
         run: |
           set -euo pipefail
@@ -312,12 +93,6 @@ jobs:
           else
             cp dist/index.js dist/index.css release/sona/
           fi
-          # 随插件包分发原生 LTF bridge 与可执行后台，供本地直接启动
-          mkdir -p release/sona/ltk
-          cp -a artifacts/ltk/. release/sona/ltk/
-          # 随包分发自维护的 LTK Manager 安装包：后台优先使用它，缺失时才回退内置地址
-          mkdir -p release/sona/ltk/manager
-          cp -a artifacts/manager/. release/sona/ltk/manager/
           # 预留用户自定义资源目录，用户可把头像、背景等图片放到这里
           mkdir -p release/sona/assets
           cat > release/sona/assets/README.txt <<'EOF'
@@ -332,19 +107,6 @@ jobs:
           # 打包
           cd release
           zip -r "../sona-${RELEASE_TAG}.zip" sona/
-
-      - name: Generate backend runtime manifest
-        run: |
-          set -euo pipefail
-          # 补发旧 tag 时 checkout 中可能没有该脚本，跳过后台清单生成
-          if [ ! -f scripts/ltk/runtime-manifest.py ]; then
-            echo "旧 tag 没有 runtime-manifest.py，跳过后台清单生成"
-            exit 0
-          fi
-          python3 scripts/ltk/runtime-manifest.py \
-            "sona-${RELEASE_TAG}.zip" "${RELEASE_TAG}" ltk.json
-          python3 -m json.tool ltk.json > /dev/null
-          echo "ltk.json 已生成（$(stat -c %s ltk.json) 字节）"
 
       - name: Resolve release notes
         id: notes
@@ -388,35 +150,24 @@ jobs:
           git checkout --orphan "dist-publish-${GITHUB_RUN_ID}"
           git rm -rf .
           cp "$GITHUB_WORKSPACE/dist/app.js" "$GITHUB_WORKSPACE/dist/app.css" "$GITHUB_WORKSPACE/dist/update.json" .
-          PUBLISHED=(app.js app.css update.json)
-          if [ -f "$GITHUB_WORKSPACE/ltk.json" ]; then
-            cp "$GITHUB_WORKSPACE/ltk.json" .
-            PUBLISHED+=(ltk.json)
-          fi
-          git add "${PUBLISHED[@]}"
+          git add app.js app.css update.json
           git -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "chore: 发布更新产物 ${DIST_TAG} 与后台清单"
+              commit -m "chore: 发布更新产物 ${DIST_TAG}"
 
-          # dist 分支只保留最新一次发布；重跑旧版本时不能把清单回退
+          # dist 分支只保留最新一次发布；重跑旧版本时不能把产物回退
           PUBLISH_DIST=1
           if git fetch --depth=1 origin dist >/dev/null 2>&1; then
-            REMOTE_RELEASE=$(git show FETCH_HEAD:ltk.json 2>/dev/null \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("release", ""))' \
+            REMOTE_VERSION=$(git show FETCH_HEAD:update.json 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' \
               2>/dev/null || true)
-            if [ -n "$REMOTE_RELEASE" ]; then
+            if [ -n "$REMOTE_VERSION" ]; then
               IS_NEWER=$(python3 -c 'import sys; key=lambda v: tuple(int(p) for p in v.lstrip("v").split(".")); print("yes" if key(sys.argv[1]) >= key(sys.argv[2]) else "no")' \
-                "$RELEASE_TAG" "$REMOTE_RELEASE")
+                "$RELEASE_TAG" "$REMOTE_VERSION")
               if [ "$IS_NEWER" != "yes" ]; then
                 PUBLISH_DIST=0
-                echo "::warning::dist 分支已是更新的 ${REMOTE_RELEASE}，跳过分支更新"
+                echo "::warning::dist 分支已是更新的 v${REMOTE_VERSION}，跳过分支更新"
               fi
-            fi
-            # 补发没有 runtime-manifest.py 的旧 tag 时，不能用缺失 ltk.json 的提交覆盖 dist
-            if [ "$PUBLISH_DIST" = "1" ] && [ ! -f "$GITHUB_WORKSPACE/ltk.json" ] \
-              && git cat-file -e FETCH_HEAD:ltk.json 2>/dev/null; then
-              PUBLISH_DIST=0
-              echo "::warning::本次发布没有 ltk.json，保留 dist 分支现有的后台清单"
             fi
           fi
           if [ "$PUBLISH_DIST" = "1" ]; then

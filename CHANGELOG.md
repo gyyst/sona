@@ -6,119 +6,6 @@
 
 ---
 
-## [2026.11.25.8] - 2026-11-25
-
-### 📝 变更
-
-### 🐛 修复
-
-- 换肤后台 `sona-ltk.exe` 现在会随 Sona 自动更新 `sona/ltk/` 下的全部运行时文件（后台 exe、LTF DLL、launcher、启动脚本、LTK Manager 安装包）。
-- 自动更新会校验 Release zip 与逐文件 SHA-256，失败保留旧版本；替换中途失败会回滚全部文件。
-- 后台重启会保留原有 `--port` / `--token` 参数，避免自定义端口的前端断连。
-- 设置页与选人面板会显示后台版本和更新状态；旧后台会提示手动覆盖一次。
-
-### ⚠️ 首次迁移
-
-- 当前旧后台没有自更新能力。请先关闭客户端、结束所有 `sona-ltk.exe`，再用本版本 zip 覆盖 `sona/ltk/` 一次。之后后台会随 Sona 自动更新。
-- 不要删除整个 `sona` 文件夹，以免丢失 `assets/` 用户资源。
-
----
-
-## [2026.11.25.7] - 2026-11-25
-
-### 📝 变更
-
-### 🐛 修复
-
-- 修复选人结束进入 InProgress 后仍等待锁人、并在 `my-selection` 返回 404 的阶段竞态。
-- 仅在 `ChampSelect` 且英雄已锁定时改写基础皮肤；迟到选择跳过 rebase 继续注入，`Lobby`/`None` 直接取消。
-- 相同皮肤选择在 2 秒内去重并串行处理，避免重复 404。
-- 仅对选人结束导致的 404 降级；连接失败与 5xx 仍正常报错。
-
----
-
-## [2026.11.25.6] - 2026-11-25
-
-### 📝 变更
-
-### 🐛 修复
-
-- 修复国服 WeGame 管理员权限客户端下 LTK 换肤的启动顺序与状态：先完成 overlay 预检再触发 UAC，host 首次协议应答后才显示「注入已启动」。
-- UAC 取消、暂存目录不受保护、Manager 被提权、overlay 构建失败现在分别给出可操作提示。
-- bridge 新增 patcher 就绪等待，默认 300 秒；旧版 LTK Manager 仍保持兼容降级。
-
----
-
-## [2026.11.25.5] - 2026-11-25
-
-### 📝 变更
-
-验证自维护 LTK Manager 随包分发。
-
----
-
-## [2026.11.25.4] - 2026-11-25
-
-### 📝 变更
-
-验证自维护 LTK Manager 随包分发。
-
----
-
-## [2026.11.25.3] - 2026-11-25
-
-### 📝 变更
-
-验证自维护 LTK Manager 随包分发。
-
----
-
-## [2026.11.25.2] - 2026-11-25
-
-### 📝 变更
-
-验证自维护 LTK Manager 随包分发。
-
----
-
-## [2026.11.25.1] - 2026-11-25
-
-### 📝 变更
-
-验证自维护 LTK Manager 随包分发。
-
----
-
-## [Unreleased]
-
-### ✨ 新增
-
-- **原生皮肤轮盘换肤** — 在英雄选择界面可直接点击客户端原生皮肤轮盘选择皮肤（含未拥有皮肤）。Sona 接管未拥有卡片的点击，维护轮盘选中态，并把选择同步到记忆、事件广播与 LTK bridge；已拥有皮肤仍走客户端原生逻辑。
-- **皮肤资产索引** — 通过轮盘缩略图的资源路径（`Skins/SkinNN/`、`Skins/Base/`）反查 skinId，适配客户端 16.23 的轮盘结构。
-
-### 📝 变更
-
-- 换肤面板定位调整为高级能力入口：保留特殊形态、随机皮肤、炫彩与完整浏览。
-- 未拥有皮肤的 `selectedSkinId` 不会由 LCU 回显，选中态改由 Sona 自行维护。
-
-### 🐛 修复
-
-- 修复未拥有皮肤点击在客户端 16.23 被逻辑层拦截、无法选择的问题。
-
----
-
-## [2026.11.24.2] - 2026-11-24
-
-### 📝 变更
-
-### ✨ 新增
-
-- **LTK Manager 一键安装** — 在 Sona 工具页直接下载官方 LTK Manager 安装包（校验大小与 SHA-256），通过 UAC 静默安装到 Program Files；支持下载进度、安装状态、错误重试与手动下载兜底。
-- **安装状态协议** — ltk-bridge 新增 `install-ltk-manager` 命令与安装状态字段，兼容旧客户端；外部安装或卸载后 10 秒内自动同步。
-- **可靠性** — 安装前二次校验安装包；下载限制 HTTPS、主机白名单、大小与总超时；UAC 取消、安装器错误码与超时均有可读提示。
-
----
-
 ## [2026.11.24.1] - 2026-11-24
 
 ### 📝 变更
@@ -132,16 +19,13 @@
   - 更新过程只写入 IndexedDB 与 DataStore，不修改 `assets/`，自定义头像、壁纸与设置保持不变。
 - **更新入口状态** — 下载失败、启动回退等可操作错误也会在侧边栏显示「更新失败」入口；常规网络检查失败不占用入口，避免长期打扰。
 - **恢复本地版本** — 远程运行时可在更新页或设置页清除待更新指针与缓存，重启后运行本地安装版本。
-- **选人换肤** — 在英雄选择界面解锁未拥有皮肤的预览（去灰、去锁标），点选皮肤或炫彩即可写入选择；支持按英雄记住上次选择，以及「随机皮肤」（可限定仅已拥有）。
-- **游戏内模型替换（LTK）** — Release 包内置 `sona/ltk/` 运行时：`sona-ltk.exe` 后台、LTF bridge、`start-sona-ltk.bat` / `install-autostart.bat`，无需 Python 环境。安装 [LTK Manager](https://github.com/LeagueToolkit/ltk-manager/releases) 后，在 Sona 工具页开启「LTK Manager 桥接」与「随 Sona 启动后台」即可；另提供独立的 `sona-ltk-runtime` 压缩包。
-- **发布构建** — 发布工作流新增 Windows x64 构建 job，自动编译 LTF bridge 并打包 `sona-ltk.exe`，随 Release 一并产出。
 
 #### 🔧 构建与发布
 
 - 生产构建改为多入口：`index.js`（冻结引导器）+ `app.js` / `app.css`，并生成 `version.json` / `update.json`；新增构建不变量校验，禁止外部二进制资源与共享 chunk。
-- 发布工作流校验 tag 与 `package.json` 版本一致，并把更新产物发布到 `dist-v<version>` 标签；Release zip 新增 `app.js`、`app.css`、`version.json`、`update.json` 与 `ltk/` 运行时目录。
+- 发布工作流校验 tag 与 `package.json` 版本一致，并把更新产物发布到 `dist-v<version>` 标签；Release zip 新增 `app.js`、`app.css`、`version.json` 与 `update.json`。
 - 新增 `scripts/build.sh` / `dev.sh` / `check.sh` / `install.sh` 与 `scripts/check-build.mjs`；构建产物不再提交到仓库根目录。
-- 新增 [`docs/auto-update.md`](docs/auto-update.md) 与 [`docs/skin-changer.md`](docs/skin-changer.md)，说明自动更新架构、换肤链路、发布流程、安全边界、排障与回滚。
+- 新增 [`docs/auto-update.md`](docs/auto-update.md)，说明自动更新架构、发布流程、安全边界、排障与回滚。
 
 ---
 
