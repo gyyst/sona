@@ -615,6 +615,11 @@ int wmain(int argc, wchar_t** argv)
     EnvVars vars = {
         { L"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", browserArgs },
         { L"LTF_CDP_PORT", portText },
+        // LTK Manager keeps the debugging switches of an instance started here, and
+        // reads and removes this marker so WebView2 and children do not inherit it.
+        // A process of the same user can set it too: it marks this start path, not
+        // the launcher.
+        { L"SONA_LTF_BRIDGE", L"1" },
     };
     if (noHide) vars.push_back({ L"LTK_NO_HIDE", L"1" });
     // LeagueToolFlop.dll, inside LTK Manager, keeps its log next to this one

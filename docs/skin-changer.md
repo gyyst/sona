@@ -93,9 +93,9 @@ Sona 插件 ──WebSocket──> lib/ltk-bridge（Python）
 4. 后台把官方安装包下载到 `sona/ltk/downloads/`，并校验大小与 SHA-256；
 5. Windows 弹出 UAC 时选择「是」；
 6. 官方安装器会把 LTK Manager 安装到 `C:\Program Files\LTK Manager`。这是 LTK Manager 的强制安全策略（ADR-0055）：它的注入组件会在提权后运行，放在用户可写目录会形成本地提权风险，因此**不能安装到插件目录**；
-7. 状态变为「已安装」后即可正常使用，后续无需重复安装。
+7. 状态变为「已安装」后即可正常使用。以后要覆盖旧版 Manager，先在工具页完全退出 LTK Manager，再点击「重新安装 / 更新 LTK Manager」。
 
-安装包默认固定为 LTK Manager v1.33.0；版本、下载地址、校验值与文件大小可在 `config.json` 中覆盖（见下方配置项）。LTK Manager 自身的后续升级由官方 updater 负责。
+安装包默认使用随 Sona 打包的 LTK Manager 版本；版本、下载地址、校验值与文件大小可在 `config.json` 中覆盖（见下方配置项）。LTK Manager 自身的后续升级由 Sona 的随包版本与手动「重新安装」负责。
 
 **方式二：手动安装**
 
@@ -185,6 +185,19 @@ skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 
 > 旧版本默认的 `darkseal-org/lol-skins` 使用「英雄英文名 / 皮肤名」布局，与后台的目录规则不匹配，会导致下载 404。若 `config.json` 中仍保存该源的默认地址（`master` 或 `main` 分支），加载时会被自动替换为新默认源；自定义镜像地址保持原样。
 
+### GitHub 代理
+
+GitHub 下载默认经过 `https://gh-proxy.org/` 代理，便于国内网络访问；代理只作用于 GitHub 主机（`raw.githubusercontent.com`、`github.com` 等），自定义镜像不会被二次代理。
+
+| 配置项 | 说明 |
+|------|------|
+| `githubProxy` | 代理前缀，默认 `https://gh-proxy.org/`；空字符串关闭；支持前缀拼接或 `{url}` 模板（如 `https://proxy.example/fetch?url={url}`） |
+| `githubProxyFallback` | 代理连接失败/5xx 时是否回退直连，默认 `true`；404 不回退 |
+
+代理覆盖皮肤资源按需下载与 LTK Manager 安装包下载。LTK Manager 安装包仍执行精确大小与 SHA-256 校验，代理主机必须来自上述配置，不能由重定向任意指定。
+
+> 代理是第三方服务，下载内容会经过代理。皮肤资源是公开内容；如不希望经过第三方，把 `githubProxy` 设为空字符串，或换成自建代理。
+
 ### 配置项
 
 见 `lib/ltk-bridge/config.example.json`：
@@ -206,9 +219,20 @@ skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 | `skinLibraryMode` | `remote` 在线下载 / `local` 本地皮肤库 |
 | `skinLibraryRoot` | 本地皮肤库根目录 |
 | `skinRepositoryBaseUrl` | 远程资源库地址，默认 `Alban1911/LeagueSkins`；旧默认地址会自动迁移 |
+| `githubProxy` | GitHub 下载代理，默认 `https://gh-proxy.org/`；空字符串关闭；支持 `{url}` 模板 |
+| `githubProxyFallback` | 代理失败时是否回退直连，默认 `true` |
 | `patcherReadyTimeoutS` | 等待 patcher 进入 `patching` 阶段的超时秒数，默认 `300`，范围 `30`–`900` |
 
 > 自定义 `ltkManagerVersion` 时，应同时提供对应的 `ltkManagerDownloadUrl`、`ltkManagerSha256` 与 `ltkManagerSize`，否则校验会失败或版本显示不一致。
+
+### 排障：CDP 与 Manager 启动
+
+后台通过 LTF bridge 的调试端口（CDP）驱动 LTK Manager 完成导入、开关 mod 与启动 patcher。只有 `ltk_launcher.exe` 启动的 Manager 会保留该端口：launcher 设置 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 与 `SONA_LTF_BRIDGE=1`，Manager 读取标记后保留调试参数、跳过按调试参数重启与关闭；标记在读取后立即被移除，不会传给 WebView2 或子进程。其他启动方式仍执行 LTK Manager 的 ADR-0080 保护。
+
+- **`CDP unavailable or timed out` / 「LTK Manager 的调试端口不可用」**：关闭 LTK Manager，再由 Sona 重新启动后台与 Manager。手动双击启动的 Manager 没有 launcher 设置的端口，bridge 无法导入。若当前 Manager 是旧版本，先在工具页完全退出它，再点「重新安装 / 更新 LTK Manager」。
+- **launcher 提示 `LTK Manager is already open`**：先完全退出正在运行的 LTK Manager，再让 Sona 重新拉起。
+- **仍然失败**：查看 `logs/ltk/ltk_launcher.log`（打包版为 `sona/ltk/logs/ltk_launcher.log`）中的 `[cdp] remote debugging on 127.0.0.1:<port>` 与 `[launch]` 行，确认 Manager 是由 launcher 启动的，并确认端口未被占用。
+- **安全边界**：`SONA_LTF_BRIDGE` 是普通环境变量，同一 Windows 用户下的任意进程都可以伪造，因此它只表示「由 Sona 的 launcher 启动」，不是强认证。详见 `lib/ltk-manager/docs/adr/0082-sona-ltf-cdp-exception.md`。
 
 ## 客户端 ↔ 后台协议
 
@@ -294,4 +318,6 @@ interface SkinSelectionEventDetail {
 - 游戏内注入属于第三方修改，存在账号处罚风险，请自行评估。
 - 本功能不提供任何竞技优势。
 - 一键安装的安装包缓存在插件目录（用户可写目录）。后台在调用安装器前会再次校验 SHA-256，但不会校验 Authenticode 签名；若本机已存在与当前用户同权限的恶意进程，仍存在替换安装包的残余风险。请勿在不可信环境中使用。
+- GitHub 下载默认经过 `gh-proxy.org` 第三方代理。代理可看到下载请求与内容；资源均为公开内容，且 LTK Manager 安装包仍有 SHA-256 校验。可在 `config.json` 中把 `githubProxy` 设为空字符串关闭，或替换为自建代理。
+- 由 `ltk_launcher.exe` 启动的 LTK Manager 会保留 WebView2 调试端口供 LTF bridge 使用（`lib/ltk-manager` 的 ADR-0082）。同一用户的本机进程可以伪造 `SONA_LTF_BRIDGE` 触发同样的放宽，因此它不是认证；其他启动方式仍按 ADR-0080 拒绝调试端口。
 - `config.json` 与默认 `authToken` 也位于用户可写位置；默认 token 仅用于本机开发。需要更高隔离时，请把 `config.json` 与 Sona 设置中的端口/token 改为随机值并限制文件权限。

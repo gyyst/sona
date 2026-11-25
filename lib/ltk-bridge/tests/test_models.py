@@ -161,6 +161,21 @@ def test_bridge_error_text_prefers_top_level_error() -> None:
   assert response.error_text == "PATCHER: TOP_LEVEL"
 
 
+def test_bridge_error_text_reads_a_string_inner_error() -> None:
+  response = BridgeResponse.model_validate(
+    {"ok": False, "response": {"ok": False, "error": "CDP unavailable or timed out"}},
+  )
+  assert response.response is not None
+  assert response.error_text == "CDP unavailable or timed out"
+  assert bridge_error_kind(response) is None
+
+
+def test_bridge_inner_accepts_a_string_error() -> None:
+  inner = BridgeInner.model_validate({"ok": False, "error": "import failed"})
+
+  assert inner.error == "import failed"
+
+
 def test_bridge_error_text_falls_back_without_error_payload() -> None:
   assert BridgeResponse(ok=False).error_text == "LTK bridge returned ok=false"
 

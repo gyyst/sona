@@ -118,7 +118,9 @@ Copy-Item lib/ltk-bridge/config.example.json lib/ltk-bridge/config.json
 - `ltkLauncherPath`：自定义 launcher 路径（默认使用 `native/ltf/bin/ltk_launcher.exe`）；
 - `lcuLockfilePath`：国服等无法自动发现 lockfile 时填写；
 - `skinLibraryMode`：`remote` 在线下载，`local` 使用本地皮肤库；
-- `skinLibraryRoot`：本地皮肤库根目录（其下应为 `skins/{championId}/...`）。
+- `skinLibraryRoot`：本地皮肤库根目录（其下应为 `skins/{championId}/...`）；
+- `githubProxy`：GitHub 下载代理，默认 `https://gh-proxy.org/`，空字符串关闭，支持前缀或 `{url}` 模板；
+- `githubProxyFallback`：代理失败时是否回退直连（默认 `true`）。
 
 ## 与 Sona 插件对接
 
@@ -178,6 +180,7 @@ skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 
 - **`LTKBridge API is not reachable`**：确认 launcher 与 DLL 同时存在，且 LTK Manager 已正常启动。
 - **`LTK Manager 已打开但没有 LTF bridge`**：关闭正在运行的 LTK Manager 后重试。
+- **`CDP unavailable or timed out` / 调试端口不可用**：LTK Manager 必须由 `ltk_launcher.exe` 启动，launcher 会设置调试端口与 `SONA_LTF_BRIDGE` 标记；手动启动的 Manager 不带端口。关闭 Manager 后由 Sona 重新拉起，并查看 `logs/ltk/ltk_launcher.log` 的 `[cdp]` 行。若仍是旧版 Manager，在工具页完全退出后点「重新安装 / 更新 LTK Manager」。标记不是认证，安全边界见 LTK Manager 的 ADR-0082。
 - **`皮肤资源不存在`**：检查网络、资源库地址，或切换为本地皮肤库。
 - **注入前弹出 UAC**：League 由 WeGame 等管理员权限启动器拉起时，注入进程需要提升。每次启动 patcher 可能弹一次暂存授权，Manager 启动后的第一次注入还会为 host 提升再弹一次；允许弹窗即可，同时确认 LTK Manager 安装在 `C:\Program Files\LTK Manager`。
 - **等待 patcher 进入注入阶段超时**：检查 UAC 弹窗是否被其他窗口遮挡，或把 `patcherReadyTimeoutS` 调大（上限 `900`）。

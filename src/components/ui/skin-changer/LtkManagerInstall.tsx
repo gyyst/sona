@@ -112,9 +112,14 @@ export function LtkManagerInstall() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {installed && (
-        <p className="sona-subtitle" style={{ color: '#4ade80' }}>
-          {status.managerMessage || t('tools.ltkManager.installed')}
-        </p>
+        <>
+          <p className="sona-subtitle" style={{ color: '#4ade80' }}>
+            {status.managerMessage || t('tools.ltkManager.installed')}
+          </p>
+          <SonaButton variant="secondary" onClick={handleInstall} disabled={pending}>
+            {pending ? t('tools.ltkManager.starting') : t('tools.ltkManager.reinstall')}
+          </SonaButton>
+        </>
       )}
 
       {active && (

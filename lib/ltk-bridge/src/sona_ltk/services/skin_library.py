@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import zipfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,8 +13,11 @@ import httpx
 
 from ..models.config import BridgeConfig
 from ..models.events import SkinSelection
+from .github_proxy import proxy_candidates
 
 MAX_ARCHIVE_BYTES = 500 * 1024 * 1024
+
+log = logging.getLogger(__name__)
 
 
 class SkinLibraryError(RuntimeError):
@@ -62,7 +67,12 @@ class SkinLibrary:
     for suffix in (".zip", ".fantome"):
       path = self._cache_root / relative_dir / f"{target_id}{suffix}"
       url = self._remote_url(relative_dir, target_id, suffix)
-      if self._download(url, path):
+      candidates = proxy_candidates(
+        url,
+        self._config.github_proxy,
+        self._config.github_proxy_fallback,
+      )
+      if self._download(candidates, path):
         return self._validate(path, selection, target_id)
 
     raise SkinLibraryError(f"皮肤资源不存在：champion={selection.champion_id} skin={target_id}")
@@ -79,37 +89,49 @@ class SkinLibrary:
   def _remote_url(self, relative_dir: Path, target_id: int, suffix: str) -> str:
     return f"{self._config.skin_repository_base_url}/skins/{relative_dir.as_posix()}/{target_id}{suffix}"
 
-  def _download(self, url: str, destination: Path) -> bool:
+  def _download(self, urls: Sequence[str], destination: Path) -> bool:
+    """依次尝试候选地址；404 表示资源不存在，其余失败换下一个候选。"""
+
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_suffix(destination.suffix + ".part")
-    try:
-      with httpx.stream(
-        "GET",
-        url,
-        follow_redirects=True,
-        timeout=self._config.download_timeout_s,
-      ) as response:
-        if response.status_code == 404:
+    last_error: SkinLibraryError | None = None
+    for index, url in enumerate(urls):
+      try:
+        with httpx.stream(
+          "GET",
+          url,
+          follow_redirects=True,
+          timeout=self._config.download_timeout_s,
+        ) as response:
+          if response.status_code == 404:
+            return False
+          response.raise_for_status()
+          content_length = int(response.headers.get("content-length", "0"))
+          if content_length > MAX_ARCHIVE_BYTES:
+            raise SkinLibraryError(f"皮肤资源超过 {MAX_ARCHIVE_BYTES} 字节上限")
+          with partial.open("wb") as handle:
+            for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+              handle.write(chunk)
+              if partial.stat().st_size > MAX_ARCHIVE_BYTES:
+                raise SkinLibraryError(f"皮肤资源超过 {MAX_ARCHIVE_BYTES} 字节上限")
+        partial.replace(destination)
+        log.info("皮肤资源下载完成：%s", url)
+        return True
+      except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
           return False
-        response.raise_for_status()
-        content_length = int(response.headers.get("content-length", "0"))
-        if content_length > MAX_ARCHIVE_BYTES:
-          raise SkinLibraryError(f"皮肤资源超过 {MAX_ARCHIVE_BYTES} 字节上限")
-        with partial.open("wb") as handle:
-          for chunk in response.iter_bytes(chunk_size=1024 * 1024):
-            handle.write(chunk)
-            if partial.stat().st_size > MAX_ARCHIVE_BYTES:
-              raise SkinLibraryError(f"皮肤资源超过 {MAX_ARCHIVE_BYTES} 字节上限")
-      partial.replace(destination)
-      return True
-    except httpx.HTTPStatusError as exc:
-      if exc.response.status_code == 404:
-        return False
-      raise SkinLibraryError(f"下载皮肤失败 {exc.response.status_code}: {url}") from exc
-    except httpx.HTTPError as exc:
-      raise SkinLibraryError(f"下载皮肤失败: {url}: {exc}") from exc
-    finally:
-      partial.unlink(missing_ok=True)
+        last_error = SkinLibraryError(f"下载皮肤失败 {exc.response.status_code}: {url}")
+      except httpx.HTTPError as exc:
+        last_error = SkinLibraryError(f"下载皮肤失败: {url}: {exc}")
+      finally:
+        partial.unlink(missing_ok=True)
+
+      if index + 1 < len(urls):
+        log.warning("下载失败，尝试备用地址 %s（原因：%s）", urls[index + 1], last_error)
+
+    if last_error is not None:
+      raise last_error
+    return False
 
   def _validate(self, path: Path, selection: SkinSelection, target_id: int) -> SkinArchive:
     try:

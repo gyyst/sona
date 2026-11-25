@@ -23,6 +23,7 @@ from ...models.ltk_manager import (
   LTK_MANAGER_VERSION,
   ManagerInstallStatus,
 )
+from ..github_proxy import proxy_candidates, proxy_host
 from ..launcher import find_ltk_manager
 from .bundled import load_bundled_manager
 from .download import ManagerDownloadError, download_installer, verify_installer
@@ -86,6 +87,13 @@ class ManagerInstaller:
     self._bundled = bundled
     self._version = config.ltk_manager_version or (bundled.version if bundled else LTK_MANAGER_VERSION)
     self._url = config.ltk_manager_download_url or LTK_MANAGER_DOWNLOAD_URL
+    self._download_urls = proxy_candidates(
+      self._url,
+      config.github_proxy,
+      config.github_proxy_fallback,
+    )
+    host = proxy_host(config.github_proxy)
+    self._extra_allowed_hosts = frozenset({host}) if host else frozenset()
     self._sha256 = (
       config.ltk_manager_sha256
       or (bundled.sha256 if bundled else None)
@@ -134,12 +142,17 @@ class ManagerInstaller:
       return self._snapshot
 
   def install(self) -> ManagerInstallSnapshot:
-    """同步执行一次安装；重复调用或安装中直接返回当前快照。"""
+    """同步执行一次安装；重复调用或安装中直接返回当前快照。
+
+    已安装时仍继续执行，供用户覆盖旧版 Manager；显式配置的 Manager 路径不改动。
+    """
 
     # 用户可能在外部刚装好；入口先探测一次，避免重复下载和 UAC。
     self.refresh()
     with self._lock:
-      if self._installing or self._snapshot.status == ManagerInstallStatus.INSTALLED:
+      if self._installing:
+        return self._snapshot
+      if self._config.ltk_manager_path is not None and self._snapshot.status == ManagerInstallStatus.INSTALLED:
         return self._snapshot
       self._installing = True
 
@@ -166,7 +179,7 @@ class ManagerInstaller:
     else:
       self._set(ManagerInstallStatus.DOWNLOADING, 0, f"正在下载 LTK Manager {self._version}")
       download_installer(
-        self._url,
+        self._download_urls[0],
         self._installer_path,
         self._sha256,
         self._size,
@@ -177,6 +190,8 @@ class ManagerInstaller:
           f"正在下载 LTK Manager {self._version}",
         ),
         client=self._http_client,
+        fallback_urls=self._download_urls[1:],
+        extra_allowed_hosts=self._extra_allowed_hosts,
       )
       self._set(ManagerInstallStatus.VERIFYING, 100, "正在校验安装包")
       try:

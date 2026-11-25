@@ -69,16 +69,23 @@ def test_installs_cached_installer_and_verifies(tmp_path: Path) -> None:
   assert calls == [_cache_path(tmp_path)]
 
 
-def test_skips_install_when_already_installed(tmp_path: Path) -> None:
+def test_reinstalls_when_already_installed(tmp_path: Path) -> None:
+  _seed_cache(tmp_path)
+  calls: list[Path] = []
+
+  def fake_run(executable: Path, parameters: str, timeout_s: float) -> int:
+    calls.append(executable)
+    return 0
+
   with (
     patch.object(module, "find_ltk_manager", return_value=MANAGER_PATH),
-    patch.object(module, "run_elevated") as run,
+    patch.object(module, "run_elevated", side_effect=fake_run),
   ):
     installer = ManagerInstaller(BridgeConfig(), tmp_path)
     snapshot = installer.install()
 
   assert snapshot.status == ManagerInstallStatus.INSTALLED
-  run.assert_not_called()
+  assert calls == [_cache_path(tmp_path)]
 
 
 def test_configured_manager_path_skips_install(tmp_path: Path) -> None:

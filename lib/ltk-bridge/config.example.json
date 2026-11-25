@@ -14,6 +14,8 @@
   "skinLibraryMode": "remote",
   "skinLibraryRoot": "",
   "skinRepositoryBaseUrl": "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main",
+  "githubProxy": "https://gh-proxy.org/",
+  "githubProxyFallback": true,
   "downloadTimeoutS": 120.0,
   "bridgeTimeoutS": 30.0,
   "patcherReadyTimeoutS": 300.0,

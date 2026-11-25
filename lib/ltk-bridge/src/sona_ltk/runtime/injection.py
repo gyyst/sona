@@ -22,7 +22,7 @@ from .champion_select import (
   read_phase,
   wait_for_champion_locked,
 )
-from .hints import patcher_failure_message
+from .hints import escalation_hint, patcher_failure_message
 from .patcher_status import patcher_is_running, wait_for_patcher_ready
 
 log = logging.getLogger(__name__)
@@ -122,7 +122,7 @@ class InjectionManager:
       mod_name = f"Sona_{selection.champion_id}_{selection.skin_id}_{uuid.uuid4().hex[:8]}"
       response = self._bridge.import_skin(str(archive.path), mod_name)
       if not response.ok:
-        raise BridgeCommandError(response.error_text)
+        raise BridgeCommandError(escalation_hint(response) or response.error_text)
 
       install = parse_install_value(response)
       mod = install.mod if install else None

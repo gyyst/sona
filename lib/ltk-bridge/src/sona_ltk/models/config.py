@@ -5,11 +5,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 DEFAULT_SKIN_REPOSITORY_BASE_URL = "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main"
+DEFAULT_GITHUB_PROXY = "https://gh-proxy.org"
+GITHUB_PROXY_PLACEHOLDER = "{url}"
 
 # 旧默认源布局是 skins/<英雄英文名>/<皮肤名>.zip，与 SkinLibrary 期望的数字目录不匹配，加载时自动迁移。
 LEGACY_SKIN_REPOSITORY_BASE_URLS = frozenset(
@@ -40,6 +43,8 @@ class BridgeConfig(BaseModel):
   skin_library_mode: Literal["remote", "local"] = "remote"
   skin_library_root: Path | None = None
   skin_repository_base_url: str = DEFAULT_SKIN_REPOSITORY_BASE_URL
+  github_proxy: str | None = DEFAULT_GITHUB_PROXY
+  github_proxy_fallback: bool = True
   download_timeout_s: float = Field(default=120.0, gt=0, le=600)
   bridge_timeout_s: float = Field(default=30.0, gt=0, le=300)
   patcher_ready_timeout_s: float = Field(default=300.0, ge=30, le=900)
@@ -54,6 +59,7 @@ class BridgeConfig(BaseModel):
     "ltk_manager_download_url",
     "ltk_manager_sha256",
     "ltk_manager_size",
+    "github_proxy",
     mode="before",
   )
   @classmethod
@@ -99,6 +105,28 @@ class BridgeConfig(BaseModel):
     if len(cleaned) != 64 or any(char not in "0123456789abcdef" for char in cleaned):
       raise ValueError("ltkManagerSha256 必须是 64 位十六进制")
     return cleaned
+
+  @field_validator("github_proxy")
+  @classmethod
+  def validate_github_proxy(cls, value: str | None) -> str | None:
+    """空值关闭代理；非空必须是可解析的 HTTPS 前缀或 {url} 模板。"""
+
+    if value is None:
+      return None
+    cleaned = value.strip()
+    if not cleaned:
+      return None
+    if any(char.isspace() for char in cleaned):
+      raise ValueError("githubProxy 不能包含空白字符")
+    if not cleaned.startswith("https://"):
+      raise ValueError("githubProxy 必须是 https:// 地址")
+
+    normalized = cleaned.rstrip("/")
+    sample = normalized.replace(GITHUB_PROXY_PLACEHOLDER, "https://raw.githubusercontent.com/x")
+    parsed = urlparse(sample)
+    if parsed.scheme != "https" or not parsed.hostname:
+      raise ValueError("githubProxy 必须是包含主机的 https:// 地址")
+    return normalized
 
   @field_validator("skin_repository_base_url")
   @classmethod

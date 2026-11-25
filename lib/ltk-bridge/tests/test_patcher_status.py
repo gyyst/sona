@@ -12,6 +12,7 @@ from sona_ltk.models.bridge import (
 )
 from sona_ltk.runtime.hints import (
   BUILD_FAILED_HINT,
+  CDP_UNAVAILABLE_HINT,
   DLL_UNAVAILABLE_HINT,
   HOST_FAILED_HINT,
   INJECTION_FAILED_HINT,
@@ -198,6 +199,14 @@ def test_league_elevated_points_at_the_uac_prompt() -> None:
   response = _start_failure("LEAGUE_ELEVATED", "")
 
   assert escalation_hint(response) == LEAGUE_ELEVATED_HINT
+
+
+def test_a_cdp_unavailable_string_error_points_at_the_launcher() -> None:
+  response = BridgeResponse.model_validate(
+    {"ok": False, "response": {"ok": False, "error": "CDP unavailable or timed out"}},
+  )
+
+  assert escalation_hint(response) == CDP_UNAVAILABLE_HINT
 
 
 def test_a_dismissed_uac_prompt_maps_to_the_cancel_hint() -> None:

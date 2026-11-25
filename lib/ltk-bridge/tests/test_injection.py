@@ -13,7 +13,7 @@ from sona_ltk.models.events import SkinSelection
 from sona_ltk.models.lcu import GameflowPhase
 from sona_ltk.runtime import champion_select as champion_select_module
 from sona_ltk.runtime import injection as injection_module
-from sona_ltk.runtime.hints import STAGING_REFUSED_HINT
+from sona_ltk.runtime.hints import CDP_UNAVAILABLE_HINT, STAGING_REFUSED_HINT
 from sona_ltk.runtime.injection import InjectionManager, InjectionStatus
 from sona_ltk.services.launcher import LtkSession
 from sona_ltk.services.lcu_client import LcuUnavailable
@@ -233,6 +233,24 @@ def test_a_staging_refusal_reaches_the_client_as_its_own_hint(
 
   assert snapshot.status is InjectionStatus.ERROR
   assert snapshot.message == STAGING_REFUSED_HINT
+
+
+def test_a_string_import_error_reaches_the_client_as_its_own_hint(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  class _CdpUnavailableBridge(FakeBridge):
+    def import_skin(self, path: str, name: str) -> BridgeResponse:
+      return BridgeResponse.model_validate(
+        {"ok": False, "response": {"ok": False, "error": "CDP unavailable or timed out"}},
+      )
+
+  instance = _build_manager(monkeypatch, tmp_path, _CdpUnavailableBridge())
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.ERROR
+  assert snapshot.message == CDP_UNAVAILABLE_HINT
 
 
 def test_chroma_uses_chroma_id(

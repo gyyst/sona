@@ -11,6 +11,10 @@ LEAGUE_ELEVATED_HINT = (
   "管理员权限的 League，请升级并把它安装在 Program Files 下后重试"
 )
 MANAGER_ELEVATED_HINT = "LTK Manager 以管理员权限运行，请改为普通权限启动后再重试"
+CDP_UNAVAILABLE_HINT = (
+  "LTK Manager 的调试端口不可用（CDP unavailable）：请关闭 LTK Manager，再由 Sona 重新启动；"
+  "仍然失败时查看 ltk_launcher 日志"
+)
 STAGING_REFUSED_HINT = (
   "LTK Manager 无法在安装目录安全暂存 patcher：请把它安装在 Program Files 下，"
   "接受 UAC 授权后重试"
@@ -48,6 +52,8 @@ def _escalation_for(kind: str, text: str) -> str | None:
     return LEAGUE_ELEVATED_HINT
 
   lowered = text.lower()
+  if "cdp unavailable" in lowered:
+    return CDP_UNAVAILABLE_HINT
   if any(marker in lowered for marker in _UAC_MARKERS):
     return UAC_CANCELLED_HINT
   if "staging the elevated patcher" in lowered or "does not match its digest" in lowered:

@@ -52,7 +52,7 @@ class BridgeInner(BridgeModel):
 
   ok: bool | None = None
   value: JsonValue | None = None
-  error: BridgeError | None = None
+  error: BridgeError | str | None = None
 
 
 class InstallValue(BridgeModel):
@@ -101,7 +101,8 @@ class BridgeResponse(BridgeModel):
   def error_text(self) -> str:
     """把 bridge / LTK 的错误压成一行文本。
 
-    提取顺序：顶层 error → response.error（code/kind/message 与嵌套 error 的 kind/message）→ 兜底文案。
+    提取顺序：顶层 error → response.error（字符串正文或 code/kind/message 与嵌套 error 的
+    kind/message）→ 兜底文案。
     """
 
     if isinstance(self.error, str):
@@ -109,6 +110,8 @@ class BridgeResponse(BridgeModel):
     if isinstance(self.error, BridgeError):
       return ": ".join(_error_parts(self.error)) or "LTK bridge error"
     inner = self.response.error if self.response is not None else None
+    if isinstance(inner, str):
+      return inner
     if isinstance(inner, BridgeError):
       text = ": ".join(_error_parts(inner))
       if text:
