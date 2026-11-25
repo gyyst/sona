@@ -76,6 +76,29 @@ git push origin v2026.11.24.3
 - 若 `dist-v*` 标签已推送但 Release 创建失败，直接重跑工作流即可：已存在的标签会被跳过，Release 会被创建/更新。
 - `dist` 分支只保留最新一次产物，用于调试；历史版本仍在各自的 `dist-v*` 标签中。
 
+## 发布产物
+
+每次发布生成两个 Release 附件：
+
+| 附件 | 内容 |
+| --- | --- |
+| `sona-<tag>.zip` | 插件本体 + `ltk/` 运行时（LTF 桥接、`sona-ltk.exe`、自维护的 LTK Manager 安装包） |
+| `sona-ltk-runtime-<tag>.zip` | 仅 `ltk/` 运行时，供手动部署 |
+
+### 自维护的 LTK Manager
+
+`release.yml` 的 `build-ltk-manager` job 从 `lib/ltk-manager` 子模块构建 LTK Manager 的 NSIS 安装包，
+放进插件 zip 的 `ltk/manager/`，并写入 `ltk/manager/manifest.json`（版本、文件名、SHA-256、大小）。
+
+- 后台 `sona-ltk` 优先使用随包安装包，缺失或校验失败时才回退到内置下载地址。
+- 安装包版本取自 `lib/ltk-manager/package.json`，由子模块提交锁定，与 Sona 的日期版本互不影响。
+  该版本必须是稳定版（不含 `-rc` 之类后缀），否则构建失败。
+- 构建会移除 `tauri.conf.json` 的 `signCommand`：fork 没有自己的证书，而 `LTK-PATCHER-LICENSE.md`
+  要求再分发时必须移除 League Toolkit 的签名。
+- 自动更新默认关闭，避免用户被更新回未打补丁的上游版本。需要启用时，在仓库 Variables 里设置
+  `SONA_LTK_UPDATER_ENDPOINT`（指向自有 releases 的 `latest.json`）与 `SONA_LTK_UPDATER_PUBKEY`，
+  并另行为该端点发布 `latest.json`。
+
 ## 相关脚本
 
 | 脚本 | 作用 |

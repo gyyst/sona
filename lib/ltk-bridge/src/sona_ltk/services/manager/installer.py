@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import threading
 import time
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from ...models.ltk_manager import (
   ManagerInstallStatus,
 )
 from ..launcher import find_ltk_manager
+from .bundled import load_bundled_manager
 from .download import ManagerDownloadError, download_installer, verify_installer
 from .elevated import ElevationCancelled, ElevationError, run_elevated
 
@@ -45,6 +47,20 @@ class ManagerInstallError(RuntimeError):
   """安装流程失败，消息可直接展示给用户。"""
 
 
+def _has_explicit_manager_config(config: BridgeConfig) -> bool:
+  """用户显式指定了安装包来源时，忽略随包副本。"""
+
+  return any(
+    value is not None
+    for value in (
+      config.ltk_manager_version,
+      config.ltk_manager_download_url,
+      config.ltk_manager_sha256,
+      config.ltk_manager_size,
+    )
+  )
+
+
 @dataclass(frozen=True)
 class ManagerInstallSnapshot:
   status: ManagerInstallStatus
@@ -65,10 +81,17 @@ class ManagerInstaller:
   ) -> None:
     self._config = config
     self._http_client = http_client
-    self._version = config.ltk_manager_version or LTK_MANAGER_VERSION
+    # 显式配置优先，其次随包副本，最后内置默认值。
+    bundled = None if _has_explicit_manager_config(config) else load_bundled_manager(project_root)
+    self._bundled = bundled
+    self._version = config.ltk_manager_version or (bundled.version if bundled else LTK_MANAGER_VERSION)
     self._url = config.ltk_manager_download_url or LTK_MANAGER_DOWNLOAD_URL
-    self._sha256 = config.ltk_manager_sha256 or LTK_MANAGER_SHA256
-    self._size = config.ltk_manager_size or LTK_MANAGER_SIZE
+    self._sha256 = (
+      config.ltk_manager_sha256
+      or (bundled.sha256 if bundled else None)
+      or LTK_MANAGER_SHA256
+    )
+    self._size = config.ltk_manager_size or (bundled.size if bundled else None) or LTK_MANAGER_SIZE
     self._installer_path = project_root / "downloads" / f"LTK.Manager_{self._version}_x64-setup.exe"
     self._lock = threading.Lock()
     self._installing = False
@@ -174,6 +197,12 @@ class ManagerInstaller:
     self._set(ManagerInstallStatus.INSTALLED, 100, message, path)
 
   def _installer_ready(self) -> bool:
+    if self._bundled is not None and not self._installer_path.is_file():
+      # 随包副本与当前 Sona 版本一起构建，优先复制它，避免下载旧的上游版本。
+      log.info("使用随包 LTK Manager 安装包：%s", self._bundled.path)
+      self._installer_path.parent.mkdir(parents=True, exist_ok=True)
+      shutil.copyfile(self._bundled.path, self._installer_path)
+
     try:
       verify_installer(self._installer_path, self._sha256, self._size)
       return True

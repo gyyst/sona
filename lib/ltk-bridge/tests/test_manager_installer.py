@@ -289,3 +289,52 @@ def test_run_elevated_requires_windows() -> None:
     pytest.skip("Windows 上会真正调用 ShellExecuteEx")
   with pytest.raises(ElevationError, match="Windows"):
     run_elevated(Path("setup.exe"), "/S", 1)
+
+
+def _write_bundle(root: Path, payload: bytes = PAYLOAD) -> None:
+  folder = root / "manager"
+  folder.mkdir(parents=True, exist_ok=True)
+  name = "LTK.Manager_1.34.0_x64-setup.exe"
+  (folder / name).write_bytes(payload)
+  (folder / "manifest.json").write_text(
+    __import__("json").dumps({
+      "version": "1.34.0",
+      "file": name,
+      "sha256": hashlib.sha256(payload).hexdigest(),
+      "size": len(payload),
+    }),
+    encoding="utf-8",
+  )
+
+
+def test_prefers_the_bundled_installer_over_downloading(tmp_path: Path) -> None:
+  _write_bundle(tmp_path)
+  calls: list[Path] = []
+
+  with (
+    patch.object(module, "find_ltk_manager", side_effect=[None, None, MANAGER_PATH]),
+    patch.object(module, "download_installer") as download,
+    patch.object(module, "run_elevated", side_effect=lambda path, _params, _t: calls.append(path) or 0),
+  ):
+    installer = ManagerInstaller(BridgeConfig(), tmp_path)
+    snapshot = installer.install()
+
+  assert snapshot.status == ManagerInstallStatus.INSTALLED
+  download.assert_not_called()
+  assert calls and calls[0].name == "LTK.Manager_1.34.0_x64-setup.exe"
+
+
+def test_explicit_config_ignores_the_bundled_installer(tmp_path: Path) -> None:
+  _write_bundle(tmp_path)
+  config = BridgeConfig(ltk_manager_version="1.33.0", ltk_manager_sha256=SHA, ltk_manager_size=len(PAYLOAD))
+
+  with (
+    _client() as client,
+    patch.object(module, "find_ltk_manager", side_effect=[None, None, MANAGER_PATH]),
+    patch.object(module, "run_elevated", return_value=0),
+  ):
+    installer = ManagerInstaller(config, tmp_path, http_client=client)
+    snapshot = installer.install()
+
+  assert snapshot.status == ManagerInstallStatus.INSTALLED
+  assert _cache_path(tmp_path).read_bytes() == PAYLOAD

@@ -142,8 +142,70 @@ jobs:
           path: artifacts/ltk-runtime/
           if-no-files-found: error
 
+  build-ltk-manager:
+    name: Build LTK Manager installer (Windows x64)
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve manager version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 安装包版本来自 fork 的 package.json，由 submodule 提交锁定，
+          # 与 Sona 自身的日期版本互不影响。
+          VERSION=$(node -p "require('./lib/ltk-manager/package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            echo "::error::lib/ltk-manager 的版本 ${VERSION} 含预发布后缀，安装包版本必须是稳定版"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build installer
+        uses: gyyst/ltk-manager/.github/workflows/build-for-sona.yml@main
+        with:
+          version: ${{ steps.version.outputs.version }}
+          # 上游端点会把用户更新回未打补丁的版本，因此默认关闭；
+          # 配置 SONA_LTK_UPDATER_ENDPOINT / PUBKEY 后指向自有 releases。
+          updater_endpoint: ${{ vars.SONA_LTK_UPDATER_ENDPOINT }}
+          updater_pubkey: ${{ vars.SONA_LTK_UPDATER_PUBKEY }}
+
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: ltk-manager-installer
+          path: artifacts/manager
+
+      - name: Write bundled manager manifest
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem -Path artifacts/manager -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $file) { throw "未找到 LTK Manager 安装包" }
+          $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
+          $manifest = [ordered]@{
+            version = "${{ steps.version.outputs.version }}"
+            file = $file.Name
+            sha256 = $hash
+            size = $file.Length
+          }
+          $manifest | ConvertTo-Json | Set-Content -Path artifacts/manager/manifest.json -Encoding utf8
+          Write-Host "$($file.Name) sha256=$hash size=$($file.Length)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltk-manager
+          path: artifacts/manager/
+          if-no-files-found: error
+
   build-and-release:
-    needs: build-ltf-bridge
+    needs: [build-ltf-bridge, build-ltk-manager]
     runs-on: ubuntu-latest
 
     env:
@@ -195,6 +257,12 @@ jobs:
           name: ltk-runtime
           path: artifacts/ltk
 
+      - name: Download LTK Manager artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ltk-manager
+          path: artifacts/manager
+
       - name: Prepare release package
         run: |
           set -euo pipefail
@@ -208,6 +276,9 @@ jobs:
           # 随插件包分发原生 LTF bridge 与可执行后台，供本地直接启动
           mkdir -p release/sona/ltk
           cp -a artifacts/ltk/. release/sona/ltk/
+          # 随包分发自维护的 LTK Manager 安装包：后台优先使用它，缺失时才回退内置地址
+          mkdir -p release/sona/ltk/manager
+          cp -a artifacts/manager/. release/sona/ltk/manager/
           # 独立运行包：解压后即可使用，无需 Python 环境
           (
             cd artifacts/ltk
