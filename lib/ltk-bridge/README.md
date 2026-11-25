@@ -54,7 +54,7 @@ sona/ltk/uninstall-autostart.bat
 sona/ltk/config.example.json
 ```
 
-也可以单独下载 `sona-ltk-runtime-<tag>.zip`。
+需要单独部署时，从 `sona-<tag>.zip` 解压出 `sona/ltk/` 目录即可。
 
 **方式二：GitHub Actions 产物**
 

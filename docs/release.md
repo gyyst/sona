@@ -78,12 +78,14 @@ git push origin v2026.11.24.3
 
 ## 发布产物
 
-每次发布生成两个 Release 附件：
+每次发布生成一个 Release 附件：
 
 | 附件 | 内容 |
 | --- | --- |
 | `sona-<tag>.zip` | 插件本体 + `ltk/` 运行时（LTF 桥接、`sona-ltk.exe`、自维护的 LTK Manager 安装包） |
-| `sona-ltk-runtime-<tag>.zip` | 仅 `ltk/` 运行时，供手动部署 |
+
+需要单独部署 `ltk/` 运行时（例如不经插件目录手动启动后台）时，从 `sona-<tag>.zip` 解压出
+`sona/ltk/` 即可，内容与该目录完全一致。
 
 ### 自维护的 LTK Manager
 

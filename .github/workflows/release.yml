@@ -303,11 +303,6 @@ jobs:
           # 随包分发自维护的 LTK Manager 安装包：后台优先使用它，缺失时才回退内置地址
           mkdir -p release/sona/ltk/manager
           cp -a artifacts/manager/. release/sona/ltk/manager/
-          # 独立运行包：解压后即可使用，无需 Python 环境
-          (
-            cd artifacts/ltk
-            zip -r "$GITHUB_WORKSPACE/sona-ltk-runtime-${RELEASE_TAG}.zip" .
-          )
           # 预留用户自定义资源目录，用户可把头像、背景等图片放到这里
           mkdir -p release/sona/assets
           cat > release/sona/assets/README.txt <<'EOF'
@@ -390,6 +385,5 @@ jobs:
           body: ${{ steps.notes.outputs.notes }}
           files: |
             sona-${{ env.RELEASE_TAG }}.zip
-            sona-ltk-runtime-${{ env.RELEASE_TAG }}.zip
           draft: false
           prerelease: false
