@@ -20,6 +20,16 @@ export type LtkManagerInstallState =
   | 'installed'
   | 'error'
 
+export type LtkBackendUpdateState =
+  | 'unknown'
+  | 'idle'
+  | 'checking'
+  | 'downloading'
+  | 'ready'
+  | 'restarting'
+  | 'error'
+  | 'unsupported'
+
 export interface LtkBridgeStatus {
   state: LtkConnectionState
   connected: boolean
@@ -31,6 +41,9 @@ export interface LtkBridgeStatus {
   managerProgress: number
   managerMessage: string
   capabilities: string[]
+  backendVersion: string
+  backendUpdateState: LtkBackendUpdateState
+  backendUpdateMessage: string
 }
 
 export interface LtkStatusMessage {
@@ -44,6 +57,9 @@ export interface LtkStatusMessage {
   ltkManagerProgress: number
   ltkManagerMessage: string
   capabilities: string[]
+  backendVersion: string
+  backendUpdateState: LtkBackendUpdateState
+  backendUpdateMessage: string
 }
 
 export const INITIAL_STATUS: LtkBridgeStatus = {
@@ -57,6 +73,14 @@ export const INITIAL_STATUS: LtkBridgeStatus = {
   managerProgress: 0,
   managerMessage: '',
   capabilities: [],
+  backendVersion: '',
+  backendUpdateState: 'unknown',
+  backendUpdateMessage: '',
+}
+
+export function shortenBackendVersion(version: string): string {
+  if (version.length <= 12) return version
+  return `${version.slice(0, 12)}…`
 }
 
 export function parseStatusMessage(raw: unknown): LtkStatusMessage | null {
@@ -80,6 +104,9 @@ export function parseStatusMessage(raw: unknown): LtkStatusMessage | null {
     ltkManagerProgress: parseProgress(data.ltkManagerProgress),
     ltkManagerMessage: typeof data.ltkManagerMessage === 'string' ? data.ltkManagerMessage : '',
     capabilities: parseCapabilities(data.capabilities),
+    backendVersion: typeof data.backendVersion === 'string' ? data.backendVersion : '',
+    backendUpdateState: parseBackendUpdateState(data.backendUpdateState),
+    backendUpdateMessage: typeof data.backendUpdateMessage === 'string' ? data.backendUpdateMessage : '',
   }
 }
 
@@ -121,6 +148,21 @@ function parseManagerStatus(value: unknown): LtkManagerInstallState {
 function parseProgress(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0
   return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function parseBackendUpdateState(value: unknown): LtkBackendUpdateState {
+  switch (value) {
+    case 'idle':
+    case 'checking':
+    case 'downloading':
+    case 'ready':
+    case 'restarting':
+    case 'error':
+    case 'unsupported':
+      return value
+    default:
+      return 'unknown'
+  }
 }
 
 function parseCapabilities(value: unknown): string[] {

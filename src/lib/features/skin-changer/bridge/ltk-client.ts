@@ -20,7 +20,12 @@ import {
   type LtkBridgeStatus,
 } from './ltk-status'
 
-export type { LtkBridgeStatus, LtkConnectionState, LtkManagerInstallState } from './ltk-status'
+export type {
+  LtkBackendUpdateState,
+  LtkBridgeStatus,
+  LtkConnectionState,
+  LtkManagerInstallState,
+} from './ltk-status'
 
 const RECONNECT_BASE_MS = 3000
 const RECONNECT_MAX_MS = 30000
@@ -177,6 +182,9 @@ class LtkBridgeClient {
       managerProgress: message.ltkManagerProgress,
       managerMessage: message.ltkManagerMessage,
       capabilities: message.capabilities,
+      backendVersion: message.backendVersion,
+      backendUpdateState: message.backendUpdateState,
+      backendUpdateMessage: message.backendUpdateMessage,
     })
   }
 

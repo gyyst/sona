@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter
 
 from .base import ApiModel
 from .ltk_manager import ManagerInstallStatus
+
+
+class BackendUpdateStatus(StrEnum):
+  """后台运行时自更新状态；旧前端会忽略该字段。"""
+
+  IDLE = "idle"
+  CHECKING = "checking"
+  DOWNLOADING = "downloading"
+  READY = "ready"
+  RESTARTING = "restarting"
+  ERROR = "error"
+  UNSUPPORTED = "unsupported"
 
 
 class AuthMessage(ApiModel):
@@ -51,6 +64,9 @@ class ServerStatus(ApiModel):
   ltk_manager_progress: int = Field(default=0, ge=0, le=100)
   ltk_manager_message: str = ""
   capabilities: list[str] = Field(default_factory=list)
+  backend_version: str = ""
+  backend_update_status: BackendUpdateStatus = BackendUpdateStatus.IDLE
+  backend_update_message: str = ""
   timestamp_ms: int = Field(ge=0)
 
 

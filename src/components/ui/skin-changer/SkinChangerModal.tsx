@@ -18,6 +18,7 @@ import {
   ltkBridgeClient,
   type LtkConnectionState,
 } from '@/lib/features/skin-changer/bridge/ltk-client'
+import { shortenBackendVersion } from '@/lib/features/skin-changer/bridge/ltk-status'
 import type { ChampionSkin } from '@/lib/features/skin-changer/state'
 import { SkinGrid } from './SkinGrid'
 import { SkinDetail } from './SkinDetail'
@@ -127,6 +128,16 @@ export function SkinChangerModal({ open, onClose }: SkinChangerModalProps) {
     ? t('skinChanger.subtitle', { champion: state.championName, count: state.skins.length })
     : t('skinChanger.title')
 
+  const backendLegacy = ltkStatus.connected && ltkStatus.backendVersion === ''
+  const backendHint = ltkStatus.connected
+    ? backendLegacy
+      ? t('skinChanger.ltk.backendLegacy')
+      : t('skinChanger.ltk.backendVersion', {
+        version: shortenBackendVersion(ltkStatus.backendVersion),
+      })
+    : ''
+  const ltkBadgeTitle = [ltkStatus.message, backendHint].filter(Boolean).join(' · ')
+
   return (
     <Modal open={open} onClose={onClose} width={940} height={640}>
       <div className="sona-skin-panel">
@@ -139,12 +150,13 @@ export function SkinChangerModal({ open, onClose }: SkinChangerModalProps) {
             {ltkStatus.state !== 'disabled' && (
               <span
                 className={`sona-skin-ltk sona-skin-ltk--${ltkStatus.state}`}
-                title={ltkStatus.message}
+                title={ltkBadgeTitle}
               >
                 {t(ltkStateKey(ltkStatus.state))}
                 {ltkStatus.state === 'applied' && ltkStatus.skinName
                   ? ` · ${ltkStatus.skinName}`
                   : ''}
+                {backendLegacy ? ` · ${t('skinChanger.ltk.backendLegacy')}` : ''}
               </span>
             )}
             <span className="sona-skin-panel-hint">{t('skinChanger.previewNotice')}</span>

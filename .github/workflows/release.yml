@@ -48,7 +48,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref }}
           submodules: recursive
+
+      - name: Inject backend build version
+        shell: pwsh
+        run: |
+          # lib/ltk-bridge 的 tree hash 只在后台源码变化时改变，用于日志与展示，
+          # 是否更新仍以 ltk.json 的逐文件哈希为准。
+          $version = (git rev-parse HEAD:lib/ltk-bridge).Trim()
+          if ($version -notmatch '^[0-9a-f]{40}$') {
+            throw "无法读取 lib/ltk-bridge 提交：$version"
+          }
+          $target = Join-Path $PWD 'lib/ltk-bridge/src/sona_ltk/_build.py'
+          $content = 'BUILD_VERSION = "' + $version + '"' + "`n"
+          [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "backend build version: $version"
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -318,6 +333,19 @@ jobs:
           cd release
           zip -r "../sona-${RELEASE_TAG}.zip" sona/
 
+      - name: Generate backend runtime manifest
+        run: |
+          set -euo pipefail
+          # 补发旧 tag 时 checkout 中可能没有该脚本，跳过后台清单生成
+          if [ ! -f scripts/ltk/runtime-manifest.py ]; then
+            echo "旧 tag 没有 runtime-manifest.py，跳过后台清单生成"
+            exit 0
+          fi
+          python3 scripts/ltk/runtime-manifest.py \
+            "sona-${RELEASE_TAG}.zip" "${RELEASE_TAG}" ltk.json
+          python3 -m json.tool ltk.json > /dev/null
+          echo "ltk.json 已生成（$(stat -c %s ltk.json) 字节）"
+
       - name: Resolve release notes
         id: notes
         env:
@@ -342,7 +370,7 @@ jobs:
             echo "EOF_RELEASE_NOTES"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish update artifacts (dist tag)
+      - name: Publish update artifacts (dist branch and tag)
         run: |
           set -euo pipefail
           DIST_TAG="dist-${RELEASE_TAG}"
@@ -353,12 +381,6 @@ jobs:
             exit 0
           fi
 
-          # 发布标签不可变：已存在则跳过，让重跑可以继续创建/更新 GitHub Release
-          if git ls-remote --exit-code --tags origin "refs/tags/${DIST_TAG}" >/dev/null 2>&1; then
-            echo "::warning::标签 ${DIST_TAG} 已存在，跳过更新产物发布（保留不可变标签）。如需重新生成产物，请发布新版本。"
-            exit 0
-          fi
-
           # 用独立 worktree 发布 dist，避免清空主工作区（Release zip 仍在工作区根目录）
           WORKTREE="$(mktemp -d)"
           git worktree add --detach "$WORKTREE" HEAD
@@ -366,13 +388,48 @@ jobs:
           git checkout --orphan "dist-publish-${GITHUB_RUN_ID}"
           git rm -rf .
           cp "$GITHUB_WORKSPACE/dist/app.js" "$GITHUB_WORKSPACE/dist/app.css" "$GITHUB_WORKSPACE/dist/update.json" .
-          git add app.js app.css update.json
+          PUBLISHED=(app.js app.css update.json)
+          if [ -f "$GITHUB_WORKSPACE/ltk.json" ]; then
+            cp "$GITHUB_WORKSPACE/ltk.json" .
+            PUBLISHED+=(ltk.json)
+          fi
+          git add "${PUBLISHED[@]}"
           git -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "chore: 发布更新产物 ${DIST_TAG}"
-          git push --force origin HEAD:dist
-          git tag "${DIST_TAG}"
-          git push origin "${DIST_TAG}"
+              commit -m "chore: 发布更新产物 ${DIST_TAG} 与后台清单"
+
+          # dist 分支只保留最新一次发布；重跑旧版本时不能把清单回退
+          PUBLISH_DIST=1
+          if git fetch --depth=1 origin dist >/dev/null 2>&1; then
+            REMOTE_RELEASE=$(git show FETCH_HEAD:ltk.json 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("release", ""))' \
+              2>/dev/null || true)
+            if [ -n "$REMOTE_RELEASE" ]; then
+              IS_NEWER=$(python3 -c 'import sys; key=lambda v: tuple(int(p) for p in v.lstrip("v").split(".")); print("yes" if key(sys.argv[1]) >= key(sys.argv[2]) else "no")' \
+                "$RELEASE_TAG" "$REMOTE_RELEASE")
+              if [ "$IS_NEWER" != "yes" ]; then
+                PUBLISH_DIST=0
+                echo "::warning::dist 分支已是更新的 ${REMOTE_RELEASE}，跳过分支更新"
+              fi
+            fi
+            # 补发没有 runtime-manifest.py 的旧 tag 时，不能用缺失 ltk.json 的提交覆盖 dist
+            if [ "$PUBLISH_DIST" = "1" ] && [ ! -f "$GITHUB_WORKSPACE/ltk.json" ] \
+              && git cat-file -e FETCH_HEAD:ltk.json 2>/dev/null; then
+              PUBLISH_DIST=0
+              echo "::warning::本次发布没有 ltk.json，保留 dist 分支现有的后台清单"
+            fi
+          fi
+          if [ "$PUBLISH_DIST" = "1" ]; then
+            git push --force origin HEAD:dist
+          fi
+
+          # 发布标签不可变：已存在则跳过，让重跑继续创建/更新 GitHub Release
+          if git ls-remote --exit-code --tags origin "refs/tags/${DIST_TAG}" >/dev/null 2>&1; then
+            echo "::warning::标签 ${DIST_TAG} 已存在，跳过更新产物标签（保留不可变标签）。如需重新生成产物，请发布新版本。"
+          else
+            git tag "${DIST_TAG}"
+            git push origin "${DIST_TAG}"
+          fi
 
           cd "$GITHUB_WORKSPACE"
           git worktree remove "$WORKTREE" --force

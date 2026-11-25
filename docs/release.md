@@ -70,11 +70,18 @@ git push origin v2026.11.24.3
 
 ## 自动更新产物
 
-`release.yml` 在创建 GitHub Release 的同时，会把 `app.js`、`app.css`、`update.json` 发布到 `dist-v<version>` 标签（例如 `dist-v2026.11.24.1`）。客户端自动更新只读取这个标签，不读取 Release 附件。
+`release.yml` 在创建 GitHub Release 的同时发布自动更新产物：
+
+- **前端**：`app.js`、`app.css`、`update.json` 提交到 `dist` 分支，并推送到不可变的 `dist-v<version>` 标签（例如 `dist-v2026.11.24.1`）。客户端自动更新只读取这个标签，不读取 Release 附件。
+- **后台运行时**：`scripts/ltk/runtime-manifest.py` 从 `sona-<tag>.zip` 生成 `ltk.json`（Release zip 与 `sona/ltk/` 下逐文件的大小、SHA-256），随前端产物一起提交到 `dist` 分支。后台 `sona-ltk` 读取 `https://raw.githubusercontent.com/gyyst/sona/dist/ltk.json`，发现本地 `sona/ltk/` 与清单不一致时，从同一 Release 的 `sona-<tag>.zip` 下载并自行替换。
+
+约束：
 
 - `dist-v*` 标签不可变，不要删除或移动；发布事故请用新版本修复。
-- 若 `dist-v*` 标签已推送但 Release 创建失败，直接重跑工作流即可：已存在的标签会被跳过，Release 会被创建/更新。
-- `dist` 分支只保留最新一次产物，用于调试；历史版本仍在各自的 `dist-v*` 标签中。
+- 若 `dist-v*` 标签已推送但 Release 创建失败，直接重跑工作流即可：已存在的标签会被跳过，Release 会被创建/更新，`dist` 分支也会更新。
+- `dist` 分支只保留最新一次产物；重跑旧版本不会把分支回退到更旧的清单。历史前端产物仍在各自的 `dist-v*` 标签中。
+- 大文件（`sona-<tag>.zip`）只作为 Release 附件，不提交到 git 标签；`ltk.json` 只包含哈希与大小，体积很小。
+- 补发自动更新之前的旧 tag（没有 `app.js`）时跳过 `dist` 发布，只创建/更新 GitHub Release；没有 `runtime-manifest.py` 的 tag 不会覆盖 `dist` 上已有的 `ltk.json`。
 
 ## 发布产物
 
@@ -115,6 +122,7 @@ git push origin v2026.11.24.3
 | `scripts/next-version.mjs` | 计算下一个版本号（当天最大序号 + 1） |
 | `scripts/update-version.mjs` | 同步 `package.json` 与 `package-lock.json` 的版本号 |
 | `scripts/prepend-changelog.mjs` | 向 `CHANGELOG.md` 顶部插入新版本块 |
+| `scripts/ltk/runtime-manifest.py` | 从 Release zip 生成后台运行时清单 `ltk.json` |
 | `scripts/publish.sh` | 本地一键触发发布工作流 |
 | `scripts/build.sh` | 本地构建插件产物并校验自动更新契约（`--install` 可重新安装依赖） |
 | `scripts/dev/dev.sh` | 本地开发模式（Vite dev server + HMR） |

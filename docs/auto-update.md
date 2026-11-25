@@ -256,9 +256,9 @@ error           → checking（重试） | idle
 4. **提取 Release notes**：优先使用调用方传入的 notes，否则从 `CHANGELOG.md` 提取；
 5. **发布更新产物**：
    - 目标标签 `dist-${RELEASE_TAG}`（例如 `dist-v2026.11.24.1`）；
-   - 标签已存在则跳过（发布标签不可变），重跑可继续创建/更新 Release；如需重新生成产物，请发布新版本；
-   - 补发自动更新之前的旧 tag（没有 `app.js`）时跳过本步骤，只创建/更新 GitHub Release；
-   - 在临时 git worktree 中用 orphan commit 将 `app.js` / `app.css` / `update.json` 提交到 `dist` 分支（force push），再推送 `dist-v*` 标签；
+   - 生成后台运行时清单 `ltk.json`（见第 14 节），与 `app.js` / `app.css` / `update.json` 一起提交到 `dist` 分支（force push）；
+   - `dist` 分支只保留最新一次发布的产物，重跑旧版本时不会把清单回退；
+   - `dist-v*` 标签不可变：已存在则跳过标签创建，但仍更新 `dist` 分支；补发自动更新之前的旧 tag（没有 `app.js`）时跳过本步骤，只创建/更新 GitHub Release；
 6. **创建 GitHub Release**：使用第 3 步工作区中的 zip。
 
 `dist-v*` 不匹配 `v*` 触发器，不会递归触发工作流。发布顺序先更新产物、再创建 Release，确保用户看到新版本时更新包已可下载。
@@ -351,3 +351,98 @@ v1.12.1 及更早版本只有单文件 `index.js`，没有引导器，因此**�
 4. 验证 `auto` / `notify` / `off` 与 `Pengu.autoUpdateCheck = false` 的组合；
 5. 验证“跳过此版本”“恢复本地版本”以及手动安装更高版本后的指针清理；
 6. 确认更新过程不修改 `assets/`，自定义头像、壁纸与设置均保留。
+
+---
+
+## 14. 后台运行时更新（sona/ltk）
+
+前端 `app.js` / `app.css` 由冻结引导器更新；换肤后台 `sona-ltk.exe` 及其同目录运行时是独立进程，引导器无法替换。为此后台自行完成 `sona/ltk/` 的运行时更新。
+
+### 14.1 更新单元与不可覆盖文件
+
+- **更新**：`sona-ltk.exe`、`ltk_launcher.exe`、`LeagueToolFlop.dll`、`config.example.json`、启动/自启脚本、`README.md`、`LICENSE`、`manager/` 下的安装包与清单。
+- **永不更新**：`index.js`（Pengu 冻结入口）、`assets/`（用户资源）、`config.json`、`logs/`、`data/`、`downloads/`（用户数据与缓存）。
+
+版本判断以 `ltk.json` 的逐文件 SHA-256 为准：Sona 发版但后台运行时文件没有变化时，后台不会重复下载。
+
+### 14.2 发布清单 ltk.json
+
+发布到 `dist` 分支根目录：
+
+```json
+{
+  "release": "v2026.11.25.8",
+  "sha256": "<Release zip 的 SHA-256>",
+  "size": 45579714,
+  "files": {
+    "ltk_launcher.exe": { "sha256": "<64 hex>", "size": 123456 },
+    "manager/manifest.json": { "sha256": "<64 hex>", "size": 234 },
+    "sona-ltk.exe": { "sha256": "<64 hex>", "size": 18350080 }
+  }
+}
+```
+
+- `release` 必须匹配 `^v\d+(?:\.\d+)+$`；
+- `sha256` / `size` 是 Release zip 的完整哈希与字节数；
+- `files` 的键是相对 `sona/ltk/` 的 POSIX 路径，禁止绝对路径、`..`、反斜杠、冒号与控制字符；
+- 文件数量 ≤ 64，单文件 ≤ 200 MB，zip ≤ 300 MB；
+- `sona-ltk.exe` 固定排在最后（替换脚本最后替换它）；
+- 清单由 `scripts/ltk/runtime-manifest.py` 从 `sona-<tag>.zip` 生成，发布流水线自动调用。
+
+下载地址由后台根据 `release` 构造，不信任清单中的任意 URL：
+
+```
+https://github.com/gyyst/sona/releases/download/{release}/sona-{release}.zip
+```
+
+只允许 HTTPS，主机白名单为 `github.com`、`raw.githubusercontent.com`、`objects.githubusercontent.com`、`release-assets.githubusercontent.com`，以及用户配置的 GitHub 代理主机；重定向每一跳都重新校验。
+
+### 14.3 自更新时机
+
+- 后台启动 5 分钟后首次检查，之后每 6 小时检查一次；
+- 下载与解压可在任意阶段进行；
+- 替换与重启只允许在 `None` / `Lobby` / `PreEndGame` / `EndGame` / `PostGame` 阶段，且没有进行中的注入、对局或 LTK Manager 安装任务；
+- 不满足条件时保持 `ready`，每 5 秒重新判定，直到空闲；
+- 非 Windows、源码运行或 `dev` 构建上报 `unsupported`，绝不替换文件。
+- PyInstaller 与 MSVC 产物不保证字节级可复现；即使后台源码未变，发布也可能生成不同哈希并触发一次完整运行时下载。发布后需观察实际是否发生。
+- 同一插件目录只应运行一个 `sona-ltk` 实例；当前没有跨进程更新锁，多实例可能同时准备替换，建议通过端口冲突或单实例启动避免。
+
+状态通过 `status` 消息上报：
+
+```ts
+interface ServerStatus {
+  // 既有字段...
+  backendVersion: string
+  backendUpdateStatus: 'idle' | 'checking' | 'downloading' | 'ready' | 'restarting' | 'error' | 'unsupported'
+  backendUpdateMessage: string
+}
+```
+
+旧后台没有这些字段，前端按 `unknown` / `legacy` 处理并提示手动覆盖一次运行时；新后台连接旧前端时，旧前端忽略新增字段。
+
+### 14.4 下载、解压与替换
+
+1. 读取 `dist/ltk.json`，校验字段与路径；
+2. 逐文件比较本地 `sona/ltk/`；全部一致时清理暂存并回到 `idle`；
+3. 下载 Release zip 到 `sona-update.zip.part`，校验整体大小与 SHA-256 后原子替换；
+4. 只解压 zip 中 `sona/ltk/` 前缀下、且出现在清单里的文件到 `sona-update.new/`：
+   - 拒绝符号链接、绝对路径、`..`、反斜杠、冒号与控制字符；
+   - 每个文件写入前限制大小，写入后校验 SHA-256；
+   - 清单缺文件、hash 不符或出现重复条目时删除整个暂存目录；
+5. 空闲时写入 `sona-ltk-update.json`（含旧进程 PID、文件列表与启动参数）与固定模板 `sona-ltk-update.ps1`，后台退出；
+6. PowerShell 等待旧进程退出，逐文件备份为 `*.old` 并替换，最后替换 `sona-ltk.exe`，再用旧进程的启动参数（如 `--port` / `--token`）启动新版本；
+7. 启动新 exe 并等待 8 秒：若进程退出，恢复全部 `*.old` 并启动旧版本；
+8. 任一步失败都回滚全部已替换文件并启动旧版本；
+9. 新版本成功启动并开始服务后才清理暂存、zip、计划、脚本与 `*.old`。
+
+替换顺序保证 `sona-ltk.exe` 最后替换：其他文件失败时旧 exe 仍然可用。
+
+### 14.5 首次迁移与回滚
+
+- 当前已安装的旧后台没有自更新能力，**必须手动覆盖一次**包含 `sona/ltk/` 的新 zip；不要删除整个 `sona` 目录，否则 `assets/` 用户资源会丢失。
+- 若只手动替换了 exe，新后台会检测到其余文件与清单不一致并自动补齐。
+- 更新失败时保留旧版本并写入 `logs/update.log`；前端更新状态显示 `error` 与原因。
+- 若替换脚本本身无法启动（例如被安全软件拦截），入口会带 `SONA_LTK_SKIP_SELF_UPDATE=1` 重新拉起旧后台，避免后台停摆；本次会话不再尝试自动更新，下次正常启动后恢复。
+- 发布窗口内 `ltk.json` 可能先于 Release 附件可见：后台下载遇到 404 会保留旧版本，下个周期重试。
+- 若需要强制回到某个旧运行时，手动解压对应 Release zip 的 `sona/ltk/` 即可；`assets/`、`config.json`、日志与皮肤数据不受影响。
+- 如果手动安装了比 `dist` 清单更新的运行时（例如群文件新版本），后台会按清单回退到 `dist` 版本；这是逐文件哈希比较的设计取舍。

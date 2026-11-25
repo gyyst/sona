@@ -15,6 +15,12 @@ from ..runtime.injection import InjectionManager, InjectionSnapshot, InjectionSt
 from ..services.lcu_client import LcuClient, LcuUnavailable
 from ..services.manager import ManagerInstaller
 from ..services.skin_library import SkinLibrary
+from ..services.update.script import (
+  STARTUP_CLEANUP_DELAY_S,
+  UpdatePlan,
+  cleanup_stale_update_files,
+)
+from .self_update import SelfUpdater
 from .websocket_server import WebSocketServer
 
 log = logging.getLogger(__name__)
@@ -22,6 +28,15 @@ log = logging.getLogger(__name__)
 MANAGER_INSTALL_CAPABILITY = "ltk-manager-install"
 MANAGER_REFRESH_INTERVAL_S = 10.0
 MANAGER_PROGRESS_INTERVAL_S = 0.5
+
+# 只有这些阶段允许后台替换运行时并重启；选人/对局/重连期间延迟
+SAFE_RESTART_PHASES = frozenset({
+  GameflowPhase.NONE,
+  GameflowPhase.LOBBY,
+  GameflowPhase.PRE_END_GAME,
+  GameflowPhase.END_GAME,
+  GameflowPhase.POST_GAME,
+})
 
 # 相同选择的抑制窗口：失败后的重试必须在窗口外才会再次进入注入状态机
 DUPLICATE_SELECTION_WINDOW_S = 2.0
@@ -43,6 +58,7 @@ class BridgeService:
 
   def __init__(self, config: BridgeConfig, project_root: Path) -> None:
     self._config = config
+    self._project_root = project_root
     self._phase = GameflowPhase.NONE
     self._lcu_ready = False
     self._library = SkinLibrary(config, project_root / "data" / "skins")
@@ -54,6 +70,8 @@ class BridgeService:
     self._selection_lock = asyncio.Lock()
     self._last_selection_key: SelectionKey | None = None
     self._last_selection_at = 0.0
+    self._stop_event = asyncio.Event()
+    self._cleanup_task: asyncio.Task[None] | None = None
     self._websocket = WebSocketServer(
       config.websocket_port,
       config.auth_token,
@@ -61,19 +79,61 @@ class BridgeService:
       self.status,
       self.handle_install_manager,
     )
+    self._self_update = SelfUpdater(
+      config,
+      project_root,
+      request_stop=self._request_stop,
+      is_safe_to_restart=self._can_restart_backend,
+      notify=self._broadcast_update_status,
+    )
 
-  async def run(self) -> None:
+  async def run(self) -> UpdatePlan | None:
     await self._websocket.start()
     log.info("Sona LTK bridge listening on ws://127.0.0.1:%s", self._config.websocket_port)
+    self._cleanup_task = asyncio.create_task(
+      self._cleanup_stale_update_files(),
+      name="sona-ltk-update-cleanup",
+    )
+    self._self_update.start()
     try:
-      while True:
+      while not self._stop_event.is_set():
         await self._poll_phase()
-        await asyncio.sleep(1.0)
+        try:
+          await asyncio.wait_for(self._stop_event.wait(), timeout=1.0)
+        except TimeoutError:
+          pass
     except asyncio.CancelledError:
       await asyncio.to_thread(self._injection.cleanup)
       raise
     finally:
+      if self._cleanup_task is not None:
+        self._cleanup_task.cancel()
+        await asyncio.gather(self._cleanup_task, return_exceptions=True)
+      await self._self_update.stop()
       await self._websocket.stop()
+    return self._self_update.plan
+
+  async def _cleanup_stale_update_files(self) -> None:
+    await asyncio.sleep(STARTUP_CLEANUP_DELAY_S)
+    await asyncio.to_thread(cleanup_stale_update_files, self._project_root)
+
+  def _request_stop(self) -> None:
+    """自更新完成替换准备后请求主循环退出，由入口脚本执行替换。"""
+
+    self._stop_event.set()
+
+  def _can_restart_backend(self) -> bool:
+    if self._phase not in SAFE_RESTART_PHASES:
+      return False
+    if self._injection.active:
+      return False
+    # 选择处理在注入 active 变为 True 之前也有一段窗口；用选择锁覆盖整个 apply。
+    if self._selection_lock.locked():
+      return False
+    return self._install_task is None or self._install_task.done()
+
+  async def _broadcast_update_status(self) -> None:
+    await self._websocket.broadcast()
 
   async def handle_selection(self, selection: SkinSelection) -> None:
     if self._is_recent_duplicate(selection):
@@ -221,9 +281,10 @@ class BridgeService:
     skin_name: str | None = None,
     patcher_running: bool = False,
   ) -> ServerStatus:
-    """所有状态消息都带上安装状态与能力，避免客户端收到选人状态后丢失。"""
+    """所有状态消息都带上安装状态、后台版本与能力，避免客户端丢失。"""
 
     manager = self._manager_installer.snapshot()
+    update = self._self_update.snapshot()
     return ServerStatus(
       phase=phase,
       injection_status=injection_status,
@@ -234,5 +295,8 @@ class BridgeService:
       ltk_manager_progress=manager.progress,
       ltk_manager_message=manager.message,
       capabilities=[MANAGER_INSTALL_CAPABILITY] if sys.platform == "win32" else [],
+      backend_version=self._self_update.version,
+      backend_update_status=update.status,
+      backend_update_message=update.message,
       timestamp_ms=int(time.time() * 1000),
     )
