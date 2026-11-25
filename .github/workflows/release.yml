@@ -142,20 +142,19 @@ jobs:
           path: artifacts/ltk-runtime/
           if-no-files-found: error
 
-  build-ltk-manager:
-    name: Build LTK Manager installer (Windows x64)
-    runs-on: windows-latest
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  resolve-ltk-version:
+    name: Resolve LTK Manager version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Resolve manager version
+      - name: Read the submodule version
         id: version
-        shell: bash
         run: |
           set -euo pipefail
           # 安装包版本来自 fork 的 package.json，由 submodule 提交锁定，
@@ -167,15 +166,25 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Build installer
-        uses: gyyst/ltk-manager/.github/workflows/build-for-sona.yml@main
-        with:
-          version: ${{ steps.version.outputs.version }}
-          # 上游端点会把用户更新回未打补丁的版本，因此默认关闭；
-          # 配置 SONA_LTK_UPDATER_ENDPOINT / PUBKEY 后指向自有 releases。
-          updater_endpoint: ${{ vars.SONA_LTK_UPDATER_ENDPOINT }}
-          updater_pubkey: ${{ vars.SONA_LTK_UPDATER_PUBKEY }}
+  build-ltk-manager:
+    name: Build LTK Manager installer (Windows x64)
+    needs: resolve-ltk-version
+    permissions:
+      contents: read
+    # 可复用工作流只能在 job 级调用，不能写成 step。
+    uses: gyyst/ltk-manager/.github/workflows/build-for-sona.yml@main
+    with:
+      version: ${{ needs.resolve-ltk-version.outputs.version }}
+      # 上游端点会把用户更新回未打补丁的版本，因此默认关闭；
+      # 配置 SONA_LTK_UPDATER_ENDPOINT / PUBKEY 后指向自有 releases。
+      updater_endpoint: ${{ vars.SONA_LTK_UPDATER_ENDPOINT }}
+      updater_pubkey: ${{ vars.SONA_LTK_UPDATER_PUBKEY }}
 
+  package-ltk-manager:
+    name: Package LTK Manager installer
+    needs: [resolve-ltk-version, build-ltk-manager]
+    runs-on: windows-latest
+    steps:
       - name: Download installer
         uses: actions/download-artifact@v4
         with:
@@ -184,12 +193,14 @@ jobs:
 
       - name: Write bundled manager manifest
         shell: pwsh
+        env:
+          VERSION: ${{ needs.resolve-ltk-version.outputs.version }}
         run: |
           $file = Get-ChildItem -Path artifacts/manager -Filter "*-setup.exe" | Select-Object -First 1
           if (-not $file) { throw "未找到 LTK Manager 安装包" }
           $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
           $manifest = [ordered]@{
-            version = "${{ steps.version.outputs.version }}"
+            version = $env:VERSION
             file = $file.Name
             sha256 = $hash
             size = $file.Length
@@ -205,7 +216,7 @@ jobs:
           if-no-files-found: error
 
   build-and-release:
-    needs: [build-ltf-bridge, build-ltk-manager]
+    needs: [build-ltf-bridge, package-ltk-manager]
     runs-on: ubuntu-latest
 
     env:
