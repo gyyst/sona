@@ -97,6 +97,11 @@ git push origin v2026.11.24.3
   要求再分发时必须移除 League Toolkit 的签名。
 - 跨仓库调用可复用工作流时必须写在 **job 级**（`jobs.<id>.uses`），不能写成 `steps[].uses`。
   写错时整个 workflow 会被判为无效：push 触发的运行 0 秒失败、`total_count` 为 0 个 job。
+- 可复用工作流默认检出**调用方**仓库，因此 fork 的构建工作流必须显式
+  `repository: gyyst/ltk-manager` 加 `ref`，否则会在 sona 仓库里跑 `pnpm install` 并失败。
+- 传给 fork 的 `ref` 必须读子模块 gitlink（`git ls-tree HEAD lib/ltk-manager`），
+  不能用 `git -C lib/ltk-manager rev-parse HEAD`：子模块未初始化时它返回父仓库 HEAD，
+  那个提交在 fork 上不存在，checkout 会报 `not our ref`。
 - 自动更新默认关闭，避免用户被更新回未打补丁的上游版本。需要启用时，在仓库 Variables 里设置
   `SONA_LTK_UPDATER_ENDPOINT`（指向自有 releases 的 `latest.json`）与 `SONA_LTK_UPDATER_PUBKEY`，
   并另行为该端点发布 `latest.json`。
