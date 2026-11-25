@@ -766,8 +766,8 @@ export const zhCN = {
   'skinChanger.formOnlyWithInjector': '该形态仅记录选择，游戏内生效需要外部注入器',
   'skinChanger.ltk.connecting': 'LTK 连接中…',
   'skinChanger.ltk.connected': 'LTK 已连接',
-  'skinChanger.ltk.applying': '正在注入…',
-  'skinChanger.ltk.applied': '游戏内已应用',
+  'skinChanger.ltk.applying': '正在准备注入…',
+  'skinChanger.ltk.applied': '注入已启动',
   'skinChanger.ltk.skippedOwned': '已拥有，未注入',
   'skinChanger.ltk.error': 'LTK 错误',
 } as const
@@ -1540,8 +1540,8 @@ export const enUS: Record<keyof typeof zhCN, string> = {
   'skinChanger.formOnlyWithInjector': 'This form is only recorded; in-game use requires an external injector',
   'skinChanger.ltk.connecting': 'Connecting to LTK…',
   'skinChanger.ltk.connected': 'LTK connected',
-  'skinChanger.ltk.applying': 'Injecting…',
-  'skinChanger.ltk.applied': 'Applied in game',
+  'skinChanger.ltk.applying': 'Preparing injection…',
+  'skinChanger.ltk.applied': 'Injection started',
   'skinChanger.ltk.skippedOwned': 'Owned, skipped',
   'skinChanger.ltk.error': 'LTK error',
 }

@@ -16,5 +16,6 @@
   "skinRepositoryBaseUrl": "https://raw.githubusercontent.com/Alban1911/LeagueSkins/main",
   "downloadTimeoutS": 120.0,
   "bridgeTimeoutS": 30.0,
+  "patcherReadyTimeoutS": 300.0,
   "logLevel": "INFO"
 }

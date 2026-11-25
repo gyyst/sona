@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -11,15 +12,25 @@ from sona_ltk.models.config import BridgeConfig
 from sona_ltk.models.events import SkinSelection
 from sona_ltk.models.lcu import GameflowPhase
 from sona_ltk.runtime import injection as injection_module
+from sona_ltk.runtime.hints import STAGING_REFUSED_HINT
 from sona_ltk.runtime.injection import InjectionManager, InjectionStatus
 from sona_ltk.services.launcher import LtkSession
 from sona_ltk.services.skin_library import SkinArchive
 
 
 class FakeBridge:
-  def __init__(self, start_ok: bool = True) -> None:
+  def __init__(
+    self,
+    start_ok: bool = True,
+    start_error: BridgeError | None = None,
+    phases: list[dict[str, object]] | None = None,
+  ) -> None:
     self.calls: list[tuple[object, ...]] = []
     self.start_ok = start_ok
+    self.start_error = start_error
+    self.phases = list(phases) if phases is not None else [{"running": True, "phase": "patching"}]
+    self.status_polls = 0
+    self.on_status: Callable[[], None] | None = None
 
   def ping(self) -> bool:
     return True
@@ -46,16 +57,21 @@ class FakeBridge:
 
   def start_patcher(self) -> BridgeResponse:
     self.calls.append(("start",))
-    if not self.start_ok:
-      return BridgeResponse(ok=False, error=BridgeError(code="PATCHER", kind="DLL_UNAVAILABLE"))
-    return BridgeResponse(ok=True)
+    if self.start_ok:
+      return BridgeResponse(ok=True)
+    error = self.start_error or BridgeError(code="PATCHER", kind="DLL_UNAVAILABLE")
+    return BridgeResponse(ok=False, response=BridgeInner(ok=False, error=error))
 
   def stop_patcher(self) -> BridgeResponse:
     self.calls.append(("stop",))
     return BridgeResponse(ok=True)
 
   def patcher_status(self) -> BridgeResponse:
-    return BridgeResponse(ok=True, response=BridgeInner(value={"running": True}))
+    self.status_polls += 1
+    if self.on_status is not None:
+      self.on_status()
+    index = min(self.status_polls - 1, len(self.phases) - 1)
+    return BridgeResponse(ok=True, response=BridgeInner(value=self.phases[index]))
 
 
 class FakeLcu:
@@ -93,6 +109,18 @@ def _selection(owned: bool = False, chroma_id: int | None = None) -> SkinSelecti
   )
 
 
+def _build_manager(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+  bridge: FakeBridge,
+  config: BridgeConfig | None = None,
+) -> InjectionManager:
+  session = LtkSession(bridge=bridge, launched_by_us=False, manager_pid=1)
+  monkeypatch.setattr(injection_module, "ensure_ltk_session", lambda cfg, log_dir: session)
+  monkeypatch.setattr(injection_module, "close_ltk_session", lambda current: None)
+  return InjectionManager(config or BridgeConfig(), FakeLibrary(), FakeLcu(), tmp_path)
+
+
 @pytest.fixture
 def manager(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[InjectionManager, FakeBridge, FakeLcu, list[LtkSession]]:
   bridge = FakeBridge()
@@ -122,6 +150,64 @@ def test_unowned_skin_is_applied(manager: tuple[InjectionManager, FakeBridge, Fa
   assert ("import", str(Path("/tmp/fake.zip")), bridge.calls[0][2]) in bridge.calls
   assert ("toggle", "m1", True) in bridge.calls
   assert ("start",) in bridge.calls
+  assert bridge.status_polls == 1
+
+
+def test_patcher_stays_applying_while_building(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  bridge = FakeBridge(
+    phases=[
+      {"running": True, "phase": "building"},
+      {"running": True, "phase": "building"},
+      {"running": True, "phase": "patching"},
+    ],
+  )
+  instance = _build_manager(monkeypatch, tmp_path, bridge)
+  monkeypatch.setattr(injection_module.time, "sleep", lambda _seconds: None)
+  observed: list[InjectionStatus] = []
+  bridge.on_status = lambda: observed.append(instance.snapshot().status)
+
+  snapshot = instance.apply(_selection())
+
+  assert bridge.status_polls == 3
+  assert set(observed) == {InjectionStatus.APPLYING}
+  assert snapshot.status is InjectionStatus.APPLIED
+
+
+def test_patcher_without_phase_keeps_the_previous_behaviour(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  bridge = FakeBridge(phases=[{"running": True}])
+  instance = _build_manager(monkeypatch, tmp_path, bridge)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.APPLIED
+  assert bridge.status_polls == 1
+
+
+def test_a_staging_refusal_reaches_the_client_as_its_own_hint(
+  monkeypatch: pytest.MonkeyPatch,
+  tmp_path: Path,
+) -> None:
+  bridge = FakeBridge(
+    phases=[
+      {
+        "running": False,
+        "phase": "idle",
+        "error": {"kind": "STAGING_REFUSED", "message": "cannot stage under Program Files"},
+      },
+    ],
+  )
+  instance = _build_manager(monkeypatch, tmp_path, bridge)
+
+  snapshot = instance.apply(_selection())
+
+  assert snapshot.status is InjectionStatus.ERROR
+  assert snapshot.message == STAGING_REFUSED_HINT
 
 
 def test_chroma_uses_chroma_id(
@@ -137,10 +223,7 @@ def test_patcher_failure_cleans_up(
   tmp_path: Path,
 ) -> None:
   bridge = FakeBridge(start_ok=False)
-  session = LtkSession(bridge=bridge, launched_by_us=False, manager_pid=1)
-  monkeypatch.setattr(injection_module, "ensure_ltk_session", lambda config, log_dir: session)
-  monkeypatch.setattr(injection_module, "close_ltk_session", lambda current: None)
-  instance = InjectionManager(BridgeConfig(), FakeLibrary(), FakeLcu(), tmp_path)
+  instance = _build_manager(monkeypatch, tmp_path, bridge)
 
   snapshot = instance.apply(_selection())
 

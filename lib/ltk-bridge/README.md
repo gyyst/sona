@@ -114,6 +114,7 @@ Copy-Item lib/ltk-bridge/config.example.json lib/ltk-bridge/config.json
 - `ltkManagerPath`：LTK Manager 的 `ltk-manager.exe` 路径（留空则自动探测）；
 - `ltkManagerVersion` / `ltkManagerDownloadUrl` / `ltkManagerSha256` / `ltkManagerSize`：一键安装使用的版本、下载地址、校验值与文件大小（留空使用内置 v1.33.0；自定义版本时四者需同步修改）；
 - `ltkManagerDownloadTimeoutS` / `ltkManagerInstallTimeoutS`：下载与安装等待超时（秒）；
+- `patcherReadyTimeoutS`：等待 patcher 进入 `patching` 阶段的超时（秒，默认 `300`，范围 `30`–`900`）；UAC 与 overlay 构建期间状态保持 `applying`；
 - `ltkLauncherPath`：自定义 launcher 路径（默认使用 `native/ltf/bin/ltk_launcher.exe`）；
 - `lcuLockfilePath`：国服等无法自动发现 lockfile 时填写；
 - `skinLibraryMode`：`remote` 在线下载，`local` 使用本地皮肤库；
@@ -147,7 +148,7 @@ Copy-Item lib/ltk-bridge/config.example.json lib/ltk-bridge/config.json
   "type": "status",
   "phase": "ChampSelect",
   "injectionStatus": "applied",
-  "message": "游戏内换肤已应用：Elementalist Lux",
+  "message": "游戏内注入已启动：Elementalist Lux",
   "skinName": "Elementalist Lux",
   "patcherRunning": true,
   "timestampMs": 1770000000000
@@ -178,7 +179,13 @@ skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 - **`LTKBridge API is not reachable`**：确认 launcher 与 DLL 同时存在，且 LTK Manager 已正常启动。
 - **`LTK Manager 已打开但没有 LTF bridge`**：关闭正在运行的 LTK Manager 后重试。
 - **`皮肤资源不存在`**：检查网络、资源库地址，或切换为本地皮肤库。
-- **patcher 拒绝启动**：确认 League / LTK Manager 都没有设置为「以管理员身份运行」。
+- **注入前弹出 UAC**：League 由 WeGame 等管理员权限启动器拉起时，注入进程需要提升。每次启动 patcher 可能弹一次暂存授权，Manager 启动后的第一次注入还会为 host 提升再弹一次；允许弹窗即可，同时确认 LTK Manager 安装在 `C:\Program Files\LTK Manager`。
+- **等待 patcher 进入注入阶段超时**：检查 UAC 弹窗是否被其他窗口遮挡，或把 `patcherReadyTimeoutS` 调大（上限 `900`）。
+- **`STAGING_REFUSED` / 安装目录无法保护 patcher**：LTK Manager 不在 `Program Files` 下，或暂存目录可写。请重新安装到 `C:\Program Files\LTK Manager`。
+- **暂存校验失败（摘要不一致或复制失败）**：重新选择皮肤重试；仍然失败时重新安装 LTK Manager。
+- **`LEAGUE_ELEVATED`**：当前 LTK Manager 会直接拒绝管理员权限的 League，说明它缺少 host 提权支持。请升级到包含 ADR-0081 支持并安装在 `Program Files` 下的版本，然后重新选择皮肤并在 UAC 中允许。
+- **`MANAGER_ELEVATED`**：不要以管理员身份运行 LTK Manager，改为普通权限启动。
+- **patcher 启动失败且提示 UAC 被取消**：重新选择皮肤，并在弹窗中选择「是」。
 - **一键安装提示「已取消 UAC 授权」**：重新点击安装，并在 UAC 窗口选择「是」；标准账户需要输入管理员凭据。
 - **一键安装提示 SHA-256 校验失败**：删除 `downloads/` 下的安装包后重试；若自定义了下载地址，确认 `ltkManagerSha256` 与文件一致。
 - **安装程序超时**：检查桌面是否有被遮挡的 UAC 弹窗，以及安全软件是否拦截了安装器。

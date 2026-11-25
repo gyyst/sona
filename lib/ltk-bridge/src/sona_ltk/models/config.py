@@ -42,6 +42,7 @@ class BridgeConfig(BaseModel):
   skin_repository_base_url: str = DEFAULT_SKIN_REPOSITORY_BASE_URL
   download_timeout_s: float = Field(default=120.0, gt=0, le=600)
   bridge_timeout_s: float = Field(default=30.0, gt=0, le=300)
+  patcher_ready_timeout_s: float = Field(default=300.0, ge=30, le=900)
   log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
   @field_validator(

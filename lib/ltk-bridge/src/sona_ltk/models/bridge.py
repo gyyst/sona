@@ -62,10 +62,29 @@ class InstallValue(BridgeModel):
   mod: LibraryMod | None = None
 
 
+class PatcherFailureValue(BridgeModel):
+  """`PatcherStatus.error`：LTK Manager 记录的最后一次启动/注入失败。"""
+
+  kind: str | None = None
+  message: str | None = None
+  stage: str | None = None
+  reason: str | None = None
+
+
 class PatcherStatusValue(BridgeModel):
+  """LTK patcher 的运行状态；`phase` 为 `idle` / `building` / `patching`。"""
+
   running: bool | None = None
   status: str | None = None
   stage: str | None = None
+  phase: str | None = None
+  error: PatcherFailureValue | None = None
+
+  @property
+  def phase_name(self) -> str:
+    """去掉大小写与空白后的 phase；缺失时返回空串。"""
+
+    return (self.phase or "").strip().lower()
 
 
 class BridgeResponse(BridgeModel):
@@ -121,8 +140,40 @@ def parse_install_value(response: BridgeResponse) -> InstallValue | None:
     return None
 
 
-def bridge_error_kind(response: BridgeResponse) -> str | None:
-  """提取 LTK patcher 错误 kind，便于调用方决定是否重试。"""
+def parse_patcher_status(response: BridgeResponse) -> PatcherStatusValue | None:
+  """从 patcher_status 响应中提取状态；结构不完整时返回 None。"""
 
-  error = response.error
-  return error.kind if isinstance(error, BridgeError) else None
+  value = response.response.value if response.response else None
+  if not isinstance(value, dict):
+    return None
+  try:
+    return PatcherStatusValue.model_validate(value)
+  except ValueError:
+    return None
+
+
+def bridge_error_kind(response: BridgeResponse) -> str | None:
+  """提取 LTK patcher 错误 kind，便于调用方决定是否重试。
+
+  LTF 把 Tauri invoke 的结果嵌在 response 里，域错误的 kind 又嵌在 `error` 下，
+  因此顶层与内层都要检查。
+  """
+
+  candidates: list[BridgeError | str | None] = [response.error]
+  if response.response is not None:
+    candidates.append(response.response.error)
+  for error in candidates:
+    kind = _nested_error_kind(error)
+    if kind:
+      return kind
+  return None
+
+
+def _nested_error_kind(error: BridgeError | str | None) -> str | None:
+  """沿 `error` 链找到第一个 kind，忽略只有 code/message 的外层。"""
+
+  while isinstance(error, BridgeError):
+    if error.kind:
+      return error.kind
+    error = error.error
+  return None

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from ..models.bridge import BridgeResponse, PatcherStatusValue, bridge_error_kind, parse_install_value
+from ..models.bridge import BridgeResponse, bridge_error_kind, parse_install_value
 from ..models.config import BridgeConfig
 from ..models.events import SkinSelection
 from ..models.lcu import GameflowPhase
@@ -18,32 +18,10 @@ from ..services.bridge_client import BridgeCommandError, BridgeUnavailable, LtkB
 from ..services.launcher import LtkSession, close_ltk_session, ensure_ltk_session
 from ..services.lcu_client import LcuClient
 from ..services.skin_library import SkinLibrary
+from .hints import patcher_failure_message
+from .patcher_status import patcher_is_running, wait_for_patcher_ready
 
 log = logging.getLogger(__name__)
-
-# 提权边界（管理员权限不匹配）的对外提示：LTK Manager 拒绝跨越权限级别注入
-LEAGUE_ELEVATED_HINT = (
-  "英雄联盟以管理员权限运行（WeGame 启动清单强制），LTK Manager 拒绝注入；"
-  "可尝试直接启动 LeagueClient.exe（普通权限）或改用其他注入方式"
-)
-MANAGER_ELEVATED_HINT = "LTK Manager 以管理员权限运行，请改为普通权限启动后再重试"
-
-
-def _escalation_hint(response: BridgeResponse) -> str | None:
-  """识别提权边界错误并返回可操作提示；其他错误返回 None。"""
-
-  text = response.error_text
-  if "LEAGUE_ELEVATED" in text:
-    return LEAGUE_ELEVATED_HINT
-  if "MANAGER_ELEVATED" in text:
-    return MANAGER_ELEVATED_HINT
-  return None
-
-
-def _patcher_failure_message(response: BridgeResponse) -> str:
-  """patcher 启动失败的对外文案：提权错误给出建议，其余错误原样透出。"""
-
-  return _escalation_hint(response) or response.error_text
 
 
 class InjectionStatus(StrEnum):
@@ -112,7 +90,7 @@ class InjectionManager:
   def _apply_locked(self, selection: SkinSelection) -> InjectionSnapshot:
     self._snapshot = InjectionSnapshot(
       InjectionStatus.APPLYING,
-      f"正在准备 {selection.skin_name}",
+      f"正在准备 {selection.skin_name}，如弹出 UAC 请允许",
       selection.skin_name,
       selection.champion_id,
     )
@@ -155,10 +133,11 @@ class InjectionManager:
       self._mods.append(managed)
       self._require_ok(self._bridge.toggle(mod.id, True), "toggle")
       self._start_patcher_locked()
+      wait_for_patcher_ready(self._bridge, self._config.patcher_ready_timeout_s)
 
       self._snapshot = InjectionSnapshot(
         InjectionStatus.APPLIED,
-        f"游戏内换肤已应用：{selection.skin_name}",
+        f"游戏内注入已启动：{selection.skin_name}",
         selection.skin_name,
         selection.champion_id,
         patcher_running=True,
@@ -222,20 +201,10 @@ class InjectionManager:
     if kind in {"ALREADY_RUNNING", "BUSY"} and self._patcher_is_running():
       self._patcher_started = True
       return
-    raise BridgeCommandError(_patcher_failure_message(response))
+    raise BridgeCommandError(patcher_failure_message(response))
 
   def _patcher_is_running(self) -> bool:
-    response = self._bridge.patcher_status()
-    if not response.ok or response.response is None:
-      return False
-    value = response.response.value
-    if not isinstance(value, dict):
-      return False
-    try:
-      status = PatcherStatusValue.model_validate(value)
-    except ValueError:
-      return False
-    return status.running is True or (status.status or "").lower() in {"running", "active"}
+    return patcher_is_running(self._bridge)
 
   def _cleanup_mods_locked(self) -> None:
     if self._session is None:

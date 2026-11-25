@@ -9,7 +9,9 @@ from sona_ltk.models.bridge import (
   BridgeInner,
   BridgeResponse,
   LibraryMod,
+  bridge_error_kind,
   parse_install_value,
+  parse_patcher_status,
 )
 from sona_ltk.models.config import BridgeConfig
 from sona_ltk.models.events import (
@@ -163,6 +165,58 @@ def test_bridge_error_text_falls_back_without_error_payload() -> None:
   assert BridgeResponse(ok=False).error_text == "LTK bridge returned ok=false"
 
 
+def test_parse_patcher_status_reads_the_phase() -> None:
+  response = BridgeResponse(
+    ok=True,
+    response=BridgeInner(value={"running": True, "phase": "patching"}),
+  )
+  status = parse_patcher_status(response)
+  assert status is not None
+  assert status.phase_name == "patching"
+
+
+def test_parse_patcher_status_accepts_a_response_without_phase() -> None:
+  response = BridgeResponse(ok=True, response=BridgeInner(value={"running": True}))
+  status = parse_patcher_status(response)
+  assert status is not None
+  assert status.phase_name == ""
+
+
+def test_parse_patcher_status_returns_none_for_an_unexpected_shape() -> None:
+  response = BridgeResponse(ok=True, response=BridgeInner(value=["patching"]))
+  assert parse_patcher_status(response) is None
+
+
+def test_parse_patcher_status_reads_the_last_failure() -> None:
+  response = BridgeResponse(
+    ok=True,
+    response=BridgeInner(
+      value={
+        "running": False,
+        "phase": "idle",
+        "error": {"kind": "STAGING_REFUSED", "message": "cannot stage"},
+      },
+    ),
+  )
+  status = parse_patcher_status(response)
+  assert status is not None
+  assert status.error is not None
+  assert status.error.kind == "STAGING_REFUSED"
+
+
+def test_bridge_error_kind_reads_nested_response_error() -> None:
+  response = BridgeResponse.model_validate(
+    {
+      "ok": False,
+      "response": {
+        "ok": False,
+        "error": {"code": "PATCHER", "error": {"kind": "STAGING_REFUSED"}},
+      },
+    },
+  )
+  assert bridge_error_kind(response) == "STAGING_REFUSED"
+
+
 def test_unknown_phase_falls_back_to_none() -> None:
   assert GameflowPhase.from_api("SomethingNew") is GameflowPhase.NONE
   assert GameflowPhase.from_api("ChampSelect") is GameflowPhase.CHAMP_SELECT
@@ -223,6 +277,16 @@ def test_config_rejects_invalid_manager_size() -> None:
 def test_config_rejects_too_small_timeout() -> None:
   with pytest.raises(ValidationError):
     BridgeConfig(ltk_manager_download_timeout_s=5)
+
+
+def test_config_patcher_ready_timeout_defaults_and_bounds() -> None:
+  assert BridgeConfig().patcher_ready_timeout_s == 300.0
+  assert BridgeConfig.model_validate_json('{"patcherReadyTimeoutS": 45}').patcher_ready_timeout_s == 45.0
+  assert BridgeConfig(patcher_ready_timeout_s=30).patcher_ready_timeout_s == 30.0
+  with pytest.raises(ValidationError):
+    BridgeConfig(patcher_ready_timeout_s=29)
+  with pytest.raises(ValidationError):
+    BridgeConfig(patcher_ready_timeout_s=901)
 
 
 def test_config_skin_repository_default() -> None:

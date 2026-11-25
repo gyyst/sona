@@ -80,7 +80,7 @@ class BridgeService:
       self._server_status(
         phase=str(self._phase),
         injection_status=str(InjectionStatus.APPLYING),
-        message=f"正在准备 {selection.skin_name}",
+        message=f"正在准备 {selection.skin_name}，如弹出 UAC 请允许",
         skin_name=selection.skin_name,
       ),
     )

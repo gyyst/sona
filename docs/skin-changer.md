@@ -141,9 +141,30 @@ Sona 插件 ──WebSocket──> lib/ltk-bridge（Python）
 4. 未拥有的皮肤：
    - 按 `championId` / `skinId` / `chromaId` 下载资源包；
    - 通过 LCU 把客户端切回基础皮肤（rebase 资源运行在基础皮肤路径）；
-   - 导入 LTK Manager、启用 mod、启动 patcher。
+   - 导入 LTK Manager、启用 mod、启动 patcher，并等待其进入 `patching` 阶段（期间保持 `applying`）。
 5. 对局结束（Lobby / EndGame / PostGame）时停止 patcher、卸载本后台导入的 mod。
-6. 状态通过 WebSocket 回传，面板顶部显示「已连接 / 正在注入 / 游戏内已应用 / 错误」。
+6. 状态通过 WebSocket 回传，面板顶部显示「已连接 / 正在准备注入 / 注入已启动 / 错误」。
+
+> `applied` 表示 patcher 已进入 `patching` 阶段（注入进程已启动），不代表 overlay 已确认附着到游戏。
+> UAC 等待与 overlay 构建期间保持 `applying`。
+
+### 管理员权限客户端（国服 / WeGame）
+
+WeGame 以管理员权限启动 League 时，注入必须跨越权限边界。当前流程是：
+
+1. 后台先完成资源下载、客户端切回基础皮肤、mod 导入与 overlay 构建；
+2. 预检通过后，LTK Manager 才请求 UAC，把它自己的 patcher host（而不是 Manager 本身）提升为管理员；
+3. host 从 `Program Files` 安装目录下的暂存副本加载已验证的 DLL，Manager 始终保持普通权限；
+4. 后台观察到 patcher 进入 `patching` 后才回传 `applied`。
+
+因此：
+
+- LTK Manager 必须安装在 `C:\Program Files\LTK Manager`。安装到用户可写目录时，暂存目录不满足保护要求，后台会提示重新安装，并拒绝启动 host；
+- 每次启动 patcher 都可能弹出一次「暂存 patcher」的 UAC；LTK Manager 启动后的第一次注入还会为 host 提升再弹一次。两次都请选择「是」；
+- 上述流程要求 LTK Manager 构建包含 host 提权支持（ADR-0081）。会直接拒绝管理员权限 League 的旧版 Manager 只会返回 `LEAGUE_ELEVATED`，需要升级后再使用；
+- overlay 构建失败不会弹 UAC；如果构建或资源准备失败，先修复错误再重试；
+- 不要以管理员权限启动 LTK Manager 本身：Manager 自身被提权时会直接拒绝启动；
+- 旧版 LTK Manager 不返回 `phase` 字段时，后台无法确认就绪，会记录警告并按原有行为标记 `applied`；升级到支持 `phase` 的版本后自动启用严格等待。
 
 ### 资源路径
 
@@ -179,6 +200,7 @@ skins/{championId}/{baseSkinId}/{chromaId}/{chromaId}.fantome
 | `skinLibraryMode` | `remote` 在线下载 / `local` 本地皮肤库 |
 | `skinLibraryRoot` | 本地皮肤库根目录 |
 | `skinRepositoryBaseUrl` | 远程资源库地址，默认 `Alban1911/LeagueSkins`；旧默认地址会自动迁移 |
+| `patcherReadyTimeoutS` | 等待 patcher 进入 `patching` 阶段的超时秒数，默认 `300`，范围 `30`–`900` |
 
 > 自定义 `ltkManagerVersion` 时，应同时提供对应的 `ltkManagerDownloadUrl`、`ltkManagerSha256` 与 `ltkManagerSize`，否则校验会失败或版本显示不一致。
 
@@ -220,7 +242,7 @@ WebSocket：`ws://127.0.0.1:{port}`，首条消息：
   "type": "status",
   "phase": "ChampSelect",
   "injectionStatus": "applied",
-  "message": "游戏内换肤已应用：Elementalist Lux",
+  "message": "游戏内注入已启动：Elementalist Lux",
   "skinName": "Elementalist Lux",
   "patcherRunning": true,
   "ltkManagerStatus": "installed",
@@ -232,6 +254,10 @@ WebSocket：`ws://127.0.0.1:{port}`，首条消息：
 ```
 
 `injectionStatus`：`idle` / `applying` / `applied` / `skipped-owned` / `error`。
+
+- `applying`：资源准备、overlay 构建或等待 UAC / patcher 进入 `patching` 阶段；
+- `applied`：patcher 已进入 `patching`，注入进程已启动（不保证 overlay 已附着到游戏）；
+- `error`：`message` 给出可操作的中文说明，例如 UAC 取消、暂存目录不受保护、Manager 被提权或等待超时。
 
 `ltkManagerStatus`：`unknown` / `not-installed` / `downloading` / `verifying` / `installing` / `installed` / `error`。
 `capabilities` 用于客户端判断后台是否支持一键安装；旧后台不返回该字段时客户端隐藏安装入口。
