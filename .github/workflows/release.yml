@@ -147,6 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      ref: ${{ steps.version.outputs.ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -175,6 +176,7 @@ jobs:
     uses: gyyst/ltk-manager/.github/workflows/build-for-sona.yml@main
     with:
       version: ${{ needs.resolve-ltk-version.outputs.version }}
+      ref: ${{ needs.resolve-ltk-version.outputs.ref }}
       # 上游端点会把用户更新回未打补丁的版本，因此默认关闭；
       # 配置 SONA_LTK_UPDATER_ENDPOINT / PUBKEY 后指向自有 releases。
       updater_endpoint: ${{ vars.SONA_LTK_UPDATER_ENDPOINT }}
