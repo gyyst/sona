@@ -1,0 +1,51 @@
+{
+  "release": "v2026.11.25.8",
+  "sha256": "03722e10c6dc5407dfcb007bee021aecc9ff916cb5004104ec4d12dac4bcf46c",
+  "size": 45618677,
+  "files": {
+    "LICENSE": {
+      "sha256": "b28a7483863f2f00be7bc1c347fb779e2fad85869d125679b1d26604bb36260a",
+      "size": 1095
+    },
+    "LeagueToolFlop.dll": {
+      "sha256": "3c7e890060552a119467de3071167c5fcff6d31cdae52d069f9ebc844a4fc2b6",
+      "size": 420864
+    },
+    "README.md": {
+      "sha256": "73499c4b2c31018fbe1245821269b64ca21af28448231d9175329c93352f62ad",
+      "size": 995
+    },
+    "config.example.json": {
+      "sha256": "7cdf710af8ab7d569cb06295420f35fcaab4dcaa422d0a420d7d375d932f9fb6",
+      "size": 628
+    },
+    "install-autostart.bat": {
+      "sha256": "c9afc201be1caa17e0042783afde104178e8ed553c7bad70db64950e34e7b4b4",
+      "size": 700
+    },
+    "ltk_launcher.exe": {
+      "sha256": "eede051c84b6f5d191937987ea9a9c05975e1a31c269e696dddb39c4e74160b8",
+      "size": 207872
+    },
+    "manager/LTK.Manager_1.34.0_x64-setup.exe": {
+      "sha256": "818215aa440d333dcb25eb5177a06c61d87537a255c1eedc3aa2f395efb5b9b8",
+      "size": 24842941
+    },
+    "manager/manifest.json": {
+      "sha256": "5454865965c3c1fbc43d1e8b1d74fa91682e02c2a0be35c8bf9eb3f815acd454",
+      "size": 178
+    },
+    "start-sona-ltk.bat": {
+      "sha256": "c6b714015dca713743cde311e0d44e3321f48caaf3a7731a89f2c821e01186c0",
+      "size": 424
+    },
+    "uninstall-autostart.bat": {
+      "sha256": "e7b813e2fcb2c516e1971b66ce80db4712064c35421f629a2e6664e7a3081044",
+      "size": 266
+    },
+    "sona-ltk.exe": {
+      "sha256": "fd8d559226fbe7d3bf5882ecba9eade56d77dee0383540e06183d56425e5e6ae",
+      "size": 20180726
+    }
+  }
+}
